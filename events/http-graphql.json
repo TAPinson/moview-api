@@ -1,0 +1,16 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /graphql",
+  "rawPath": "/graphql",
+  "headers": {
+    "content-type": "application/json"
+  },
+  "requestContext": {
+    "http": {
+      "method": "POST",
+      "path": "/graphql"
+    }
+  },
+  "body": "{\"query\":\"query Hello($name: String) { hello(name: $name) { message requestId } }\",\"variables\":{\"name\":\"Ali\"}}",
+  "isBase64Encoded": false
+}

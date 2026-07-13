@@ -1,0 +1,213 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: moview-api Python GraphQL Lambda
+
+Parameters:
+  DatabaseUrlSecretArn:
+    Type: String
+    NoEcho: true
+    Description: ARN of the Secrets Manager secret containing the Neon DATABASE_URL.
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 10
+    MemorySize: 256
+    Architectures:
+      - x86_64
+
+Resources:
+  MoviewUserPool:
+    Type: AWS::Cognito::UserPool
+    DependsOn:
+      - MoviewUserPoolInvokeFunctionPermission
+    Properties:
+      UserPoolName: moview-api-users
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      LambdaConfig:
+        PostConfirmation: !GetAtt MoviewApiFunction.Arn
+
+  MoviewUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: moview-ui
+      UserPoolId: !Ref MoviewUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  MoviewGraphQLApi:
+    Type: AWS::AppSync::GraphQLApi
+    Properties:
+      Name: moview-api
+      AuthenticationType: AMAZON_COGNITO_USER_POOLS
+      UserPoolConfig:
+        AwsRegion: !Ref AWS::Region
+        UserPoolId: !Ref MoviewUserPool
+        DefaultAction: ALLOW
+
+  MoviewGraphQLSchema:
+    Type: AWS::AppSync::GraphQLSchema
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      Definition: |
+        schema {
+          query: Query
+        }
+
+        type Query {
+          health: Health!
+          hello(name: String): Greeting!
+          me: UserProfile!
+        }
+
+        type Health {
+          ok: Boolean!
+          service: String!
+        }
+
+        type Greeting {
+          message: String!
+          requestId: String
+        }
+
+        type UserProfile {
+          id: Int!
+          username: String!
+          email: String!
+          admin: Boolean!
+          firstName: String
+          lastName: String
+        }
+
+  MoviewApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: ali_api.handler.lambda_handler
+      Environment:
+        Variables:
+          DATABASE_URL_SECRET_ARN: !Ref DatabaseUrlSecretArn
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref DatabaseUrlSecretArn
+  MoviewUserPoolInvokeFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref MoviewApiFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+
+  MoviewAppSyncServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: appsync.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeMoviewApiFunction
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt MoviewApiFunction.Arn
+
+  MoviewLambdaDataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      Name: MoviewApiLambda
+      Type: AWS_LAMBDA
+      ServiceRoleArn: !GetAtt MoviewAppSyncServiceRole.Arn
+      LambdaConfig:
+        LambdaFunctionArn: !GetAtt MoviewApiFunction.Arn
+
+  HealthResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn:
+      - MoviewGraphQLSchema
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Query
+      FieldName: health
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  HelloResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn:
+      - MoviewGraphQLSchema
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Query
+      FieldName: hello
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  MeResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn:
+      - MoviewGraphQLSchema
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Query
+      FieldName: me
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+Outputs:
+  MoviewUserPoolId:
+    Description: Cognito User Pool ID for moview-ui authentication.
+    Value: !Ref MoviewUserPool
+  MoviewUserPoolClientId:
+    Description: Cognito User Pool app client ID for moview-ui.
+    Value: !Ref MoviewUserPoolClient
+  MoviewGraphQLApiId:
+    Description: AppSync GraphQL API ID.
+    Value: !GetAtt MoviewGraphQLApi.ApiId
+  MoviewGraphQLApiUrl:
+    Description: AppSync GraphQL endpoint URL.
+    Value: !GetAtt MoviewGraphQLApi.GraphQLUrl
+  MoviewApiFunctionArn:
+    Description: Lambda function ARN for AppSync data source configuration.
+    Value: !GetAtt MoviewApiFunction.Arn
+

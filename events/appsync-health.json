@@ -1,0 +1,13 @@
+{
+  "arguments": {},
+  "identity": null,
+  "source": null,
+  "request": {
+    "headers": {}
+  },
+  "info": {
+    "fieldName": "health",
+    "parentTypeName": "Query",
+    "variables": {}
+  }
+}

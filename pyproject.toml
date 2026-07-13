@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "moview-api"
+version = "0.1.0"
+description = "Python GraphQL Lambda API with AppSync-compatible resolver handling."
+requires-python = ">=3.12"
+dependencies = [
+  "graphql-core>=3.2,<4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+

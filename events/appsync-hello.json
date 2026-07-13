@@ -1,0 +1,15 @@
+{
+  "arguments": {
+    "name": "Ali"
+  },
+  "identity": null,
+  "source": null,
+  "request": {
+    "headers": {}
+  },
+  "info": {
+    "fieldName": "hello",
+    "parentTypeName": "Query",
+    "variables": {}
+  }
+}

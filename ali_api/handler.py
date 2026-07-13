@@ -1,0 +1,196 @@
+from __future__ import annotations
+
+import base64
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+from graphql import graphql_sync
+
+from ali_api.db import create_user_profile
+from ali_api.schema import build_hello_response, build_user_profile_response, schema
+
+
+JsonObject = dict[str, Any]
+
+
+def lambda_handler(event: JsonObject, context: Any) -> JsonObject:
+    """AWS Lambda entry point for HTTP GraphQL, AppSync, and Cognito events."""
+    if _is_cognito_post_confirmation_event(event):
+        return _handle_cognito_post_confirmation(event)
+
+    if _is_appsync_resolver_event(event):
+        return _handle_appsync_resolver(event, context)
+
+    return _handle_http_graphql(event, context)
+
+
+def _handle_http_graphql(event: JsonObject, context: Any) -> JsonObject:
+    method = _http_method(event)
+    if method == "GET":
+        params = event.get("queryStringParameters") or {}
+        query = params.get("query")
+        variables = _json_or_none(params.get("variables"))
+        operation_name = params.get("operationName")
+    else:
+        payload = _json_body(event)
+        query = payload.get("query")
+        variables = payload.get("variables")
+        operation_name = payload.get("operationName")
+
+    if not query:
+        return _http_response(400, {"errors": [{"message": "Missing GraphQL query."}]})
+
+    result = graphql_sync(
+        schema,
+        query,
+        variable_values=variables,
+        operation_name=operation_name,
+        context_value={"event": event, "lambda_context": context},
+    )
+
+    body: JsonObject = {}
+    if result.errors:
+        body["errors"] = [_format_graphql_error(error) for error in result.errors]
+    if result.data is not None:
+        body["data"] = result.data
+
+    return _http_response(200 if not result.errors else 400, body)
+
+
+def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
+    field_name = _appsync_field_name(event)
+    arguments = event.get("arguments") or {}
+
+    if field_name == "health":
+        return {"ok": True, "service": "moview-api"}
+
+    if field_name == "hello":
+        return build_hello_response(arguments.get("name"), _aws_request_id(context))
+
+    if field_name == "me":
+        return build_user_profile_response(_appsync_claims(event))
+
+    raise ValueError(f"Unsupported AppSync field: {field_name}")
+
+
+def _is_cognito_post_confirmation_event(event: JsonObject) -> bool:
+    trigger_source = event.get("triggerSource")
+    return isinstance(trigger_source, str) and trigger_source.startswith(
+        "PostConfirmation_"
+    )
+
+
+def _handle_cognito_post_confirmation(event: JsonObject) -> JsonObject:
+    request = event.get("request") or {}
+    attributes = request.get("userAttributes") or {}
+    user_uuid = attributes.get("sub")
+    email = attributes.get("email")
+
+    if not user_uuid or not email:
+        raise ValueError("Cognito post-confirmation event is missing sub or email.")
+
+    create_user_profile(
+        user_uuid=user_uuid,
+        email=email,
+        first_name=attributes.get("given_name"),
+        last_name=attributes.get("family_name"),
+    )
+    return event
+
+
+def _is_appsync_resolver_event(event: JsonObject) -> bool:
+    return _appsync_field_name(event) is not None
+
+
+def _appsync_field_name(event: JsonObject) -> str | None:
+    info = event.get("info") or {}
+    return event.get("fieldName") or info.get("fieldName")
+
+
+def _appsync_claims(event: JsonObject) -> dict[str, Any]:
+    identity = event.get("identity") or {}
+    claims = identity.get("claims")
+    return claims if isinstance(claims, dict) else {}
+
+
+def _http_method(event: JsonObject) -> str:
+    request_context = event.get("requestContext") or {}
+    http_context = request_context.get("http") or {}
+    return (
+        http_context.get("method")
+        or request_context.get("httpMethod")
+        or event.get("httpMethod")
+        or "POST"
+    ).upper()
+
+
+def _json_body(event: JsonObject) -> JsonObject:
+    body = event.get("body")
+    if body is None:
+        return event if "query" in event else {}
+
+    if event.get("isBase64Encoded"):
+        body = base64.b64decode(body).decode("utf-8")
+
+    if isinstance(body, dict):
+        return body
+
+    try:
+        parsed = json.loads(body)
+    except json.JSONDecodeError:
+        return {}
+
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _json_or_none(value: str | None) -> Any:
+    if not value:
+        return None
+
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return None
+
+
+def _http_response(status_code: int, body: JsonObject) -> JsonObject:
+    return {
+        "statusCode": status_code,
+        "headers": {
+            "content-type": "application/json",
+            "access-control-allow-origin": "*",
+        },
+        "body": json.dumps(body),
+    }
+
+
+def _format_graphql_error(error: Any) -> JsonObject:
+    formatted: JsonObject = {"message": error.message}
+    if error.locations:
+        formatted["locations"] = [
+            {"line": location.line, "column": location.column}
+            for location in error.locations
+        ]
+    if error.path:
+        formatted["path"] = error.path
+    return formatted
+
+
+def _aws_request_id(context: Any) -> str | None:
+    return getattr(context, "aws_request_id", None)
+
+
+def main() -> None:
+    if len(sys.argv) != 2:
+        raise SystemExit("Usage: python -m ali_api.handler <event.json>")
+
+    event = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+    response = lambda_handler(event, context=None)
+    print(json.dumps(response, indent=2))
+
+
+if __name__ == "__main__":
+    main()
+

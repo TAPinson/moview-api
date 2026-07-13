@@ -1,0 +1,28 @@
+schema {
+  query: Query
+}
+
+type Query {
+  health: Health!
+  hello(name: String): Greeting!
+  me: UserProfile!
+}
+
+type Health {
+  ok: Boolean!
+  service: String!
+}
+
+type Greeting {
+  message: String!
+  requestId: String
+}
+
+type UserProfile {
+  id: Int!
+  username: String!
+  email: String!
+  admin: Boolean!
+  firstName: String
+  lastName: String
+}
