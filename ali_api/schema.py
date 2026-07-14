@@ -6,6 +6,7 @@ from typing import Any
 from graphql import GraphQLResolveInfo, build_schema
 
 from ali_api.db import get_or_create_user_profile, get_postgres_now, update_user_profile
+from ali_api.tmdb import search_movies
 
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.graphql"
@@ -33,7 +34,23 @@ def build_hello_response(name: str | None, request_id: str | None) -> dict[str, 
     }
 
 
-def resolve_me(_source: Any, info: GraphQLResolveInfo) -> dict[str, Any]:
+def resolve_users(_source: Any, _info: GraphQLResolveInfo) -> dict[str, Any]:
+    return {}
+
+
+def resolve_movies(_source: Any, _info: GraphQLResolveInfo) -> dict[str, Any]:
+    return {}
+
+
+def resolve_movie_search(
+    _source: Any,
+    _info: GraphQLResolveInfo,
+    query: str,
+) -> list[dict[str, Any]]:
+    return search_movies(query)
+
+
+def resolve_profile(_source: Any, info: GraphQLResolveInfo) -> dict[str, Any]:
     claims = _identity_claims(info.context or {})
     return build_user_profile_response(claims)
 
@@ -110,15 +127,24 @@ def _optional_claim(claims: dict[str, Any], key: str) -> str | None:
 
 schema = build_schema(SCHEMA_PATH.read_text(encoding="utf-8"))
 query_type = schema.get_type("Query")
+users_type = schema.get_type("Users")
+movies_type = schema.get_type("Movies")
 mutation_type = schema.get_type("Mutation")
 
 if query_type is None:
     raise RuntimeError("Schema is missing Query type.")
+if users_type is None:
+    raise RuntimeError("Schema is missing Users type.")
+if movies_type is None:
+    raise RuntimeError("Schema is missing Movies type.")
 if mutation_type is None:
     raise RuntimeError("Schema is missing Mutation type.")
 
 query_type.fields["health"].resolve = resolve_health
 query_type.fields["hello"].resolve = resolve_hello
-query_type.fields["me"].resolve = resolve_me
+query_type.fields["users"].resolve = resolve_users
+query_type.fields["movies"].resolve = resolve_movies
+users_type.fields["profile"].resolve = resolve_profile
+movies_type.fields["search"].resolve = resolve_movie_search
 mutation_type.fields["updateUser"].resolve = resolve_update_user
 

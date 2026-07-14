@@ -6,7 +6,8 @@ schema {
 type Query {
   health: Health!
   hello(name: String): Greeting!
-  me: UserProfile!
+  users: Users!
+  movies: Movies!
 }
 
 type Mutation {
@@ -27,6 +28,31 @@ type Health {
 type Greeting {
   message: String!
   requestId: String
+}
+
+type Users {
+  profile: UserProfile!
+}
+
+type Movies {
+  search(query: String!): [MovieSearchResult!]!
+}
+
+type MovieSearchResult {
+  poster_path: String
+  adult: Boolean
+  overview: String
+  release_date: String
+  genre_ids: [Int!]!
+  id: Int
+  original_title: String
+  original_language: String
+  title: String
+  backdrop_path: String
+  popularity: Float
+  vote_count: Int
+  video: Boolean
+  vote_average: Float
 }
 
 type UserProfile {

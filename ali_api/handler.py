@@ -9,6 +9,7 @@ from typing import Any
 from graphql import graphql_sync
 
 from ali_api.db import create_user_profile
+from ali_api.tmdb import search_movies
 from ali_api.schema import (
     build_hello_response,
     build_update_user_response,
@@ -74,11 +75,22 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
     if field_name == "hello":
         return build_hello_response(arguments.get("name"), _aws_request_id(context))
 
-    if field_name == "me":
+    if field_name == "users":
+        return {}
+
+    if field_name == "movies":
+        return {}
+
+    if field_name == "search":
+        return search_movies(arguments.get("query") or "")
+
+    if field_name == "profile":
         return build_user_profile_response(_appsync_claims(event))
 
     if field_name == "updateUser":
-        return build_update_user_response(_appsync_claims(event), arguments.get("input") or {})
+        return build_update_user_response(
+            _appsync_claims(event), arguments.get("input") or {}
+        )
 
     raise ValueError(f"Unsupported AppSync field: {field_name}")
 

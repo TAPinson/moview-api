@@ -109,7 +109,16 @@ def test_cognito_post_confirmation_creates_user_profile(monkeypatch) -> None:
     }
 
 
-def test_appsync_me_resolver(monkeypatch) -> None:
+def test_appsync_users_resolver() -> None:
+    event = {
+        "arguments": {},
+        "info": {"fieldName": "users", "parentTypeName": "Query"},
+    }
+
+    assert lambda_handler(event, context=None) == {}
+
+
+def test_appsync_users_profile_resolver(monkeypatch) -> None:
     profile = {
         "id": 1,
         "username": "user-123e4567-e89b-12d3-a456-426614174000",
@@ -133,7 +142,7 @@ def test_appsync_me_resolver(monkeypatch) -> None:
     )
     event = {
         "arguments": {},
-        "info": {"fieldName": "me", "parentTypeName": "Query"},
+        "info": {"fieldName": "profile", "parentTypeName": "Users"},
         "identity": {
             "claims": {
                 "sub": "123e4567-e89b-12d3-a456-426614174000",
@@ -186,3 +195,45 @@ def test_appsync_update_user_resolver(monkeypatch) -> None:
     }
 
     assert lambda_handler(event, context=None) == profile
+
+
+def test_appsync_movies_resolver() -> None:
+    event = {
+        "arguments": {},
+        "info": {"fieldName": "movies", "parentTypeName": "Query"},
+    }
+
+    assert lambda_handler(event, context=None) == {}
+
+
+def test_appsync_movie_search_resolver(monkeypatch) -> None:
+    results = [
+        {
+            "poster_path": "/IfB9hy4JH1eH6HEfIgIGORXi5h.jpg",
+            "adult": False,
+            "overview": "Jack Reacher must uncover the truth behind a major government conspiracy in order to clear his name.",
+            "release_date": "2016-10-19",
+            "genre_ids": [53, 28, 80, 18, 9648],
+            "id": 343611,
+            "original_title": "Jack Reacher: Never Go Back",
+            "original_language": "en",
+            "title": "Jack Reacher: Never Go Back",
+            "backdrop_path": "/4ynQYtSEuU5hyipcGkfD6ncwtwz.jpg",
+            "popularity": 26.818468,
+            "vote_count": 201,
+            "video": False,
+            "vote_average": 4.19,
+        }
+    ]
+
+    def fake_search_movies(query: str):
+        assert query == "Jack Reacher"
+        return results
+
+    monkeypatch.setattr("ali_api.handler.search_movies", fake_search_movies)
+    event = {
+        "arguments": {"query": "Jack Reacher"},
+        "info": {"fieldName": "search", "parentTypeName": "Movies"},
+    }
+
+    assert lambda_handler(event, context=None) == results
