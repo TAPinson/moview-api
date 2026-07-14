@@ -9,7 +9,12 @@ from typing import Any
 from graphql import graphql_sync
 
 from ali_api.db import create_user_profile
-from ali_api.schema import build_hello_response, build_user_profile_response, schema
+from ali_api.schema import (
+    build_hello_response,
+    build_update_user_response,
+    build_user_profile_response,
+    schema,
+)
 
 
 JsonObject = dict[str, Any]
@@ -71,6 +76,9 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
 
     if field_name == "me":
         return build_user_profile_response(_appsync_claims(event))
+
+    if field_name == "updateUser":
+        return build_update_user_response(_appsync_claims(event), arguments.get("input") or {})
 
     raise ValueError(f"Unsupported AppSync field: {field_name}")
 

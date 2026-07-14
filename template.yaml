@@ -64,12 +64,23 @@ Resources:
       Definition: |
         schema {
           query: Query
+          mutation: Mutation
         }
 
         type Query {
           health: Health!
           hello(name: String): Greeting!
           me: UserProfile!
+        }
+
+        type Mutation {
+          updateUser(input: UpdateUserProfileInput!): UserProfile!
+        }
+
+        input UpdateUserProfileInput {
+          username: String!
+          firstName: String
+          lastName: String
         }
 
         type Health {
@@ -185,6 +196,23 @@ Resources:
       ApiId: !GetAtt MoviewGraphQLApi.ApiId
       TypeName: Query
       FieldName: me
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  UpdateUserResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn:
+      - MoviewGraphQLSchema
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: updateUser
       DataSourceName: !GetAtt MoviewLambdaDataSource.Name
       RequestMappingTemplate: |
         {

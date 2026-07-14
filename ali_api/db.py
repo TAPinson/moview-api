@@ -107,6 +107,46 @@ def _user_profile_from_row(row: Any) -> dict[str, Any]:
     }
 
 
+def update_user_profile(
+    *,
+    user_uuid: str,
+    email: str,
+    username: str,
+    first_name: str | None,
+    last_name: str | None,
+) -> dict[str, Any]:
+    default_username = f"user-{user_uuid}"
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                """
+                update users
+                set username = %s,
+                    first_name = %s,
+                    last_name = %s
+                where email = %s or username = %s
+                returning id, username, email, admin, first_name, last_name
+                """,
+                (username, first_name, last_name, email, default_username),
+            )
+            row = cursor.fetchone()
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    if row is None:
+        raise RuntimeError("User profile was not found.")
+
+    return _user_profile_from_row(row)
+
+
 def _connect(database_url: str) -> Any:
     import pg8000.dbapi
 

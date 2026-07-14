@@ -1,11 +1,22 @@
 schema {
   query: Query
+  mutation: Mutation
 }
 
 type Query {
   health: Health!
   hello(name: String): Greeting!
   me: UserProfile!
+}
+
+type Mutation {
+  updateUser(input: UpdateUserProfileInput!): UserProfile!
+}
+
+input UpdateUserProfileInput {
+  username: String!
+  firstName: String
+  lastName: String
 }
 
 type Health {

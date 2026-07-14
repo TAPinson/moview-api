@@ -145,3 +145,44 @@ def test_appsync_me_resolver(monkeypatch) -> None:
     }
 
     assert lambda_handler(event, context=None) == profile
+
+
+def test_appsync_update_user_resolver(monkeypatch) -> None:
+    profile = {
+        "id": 1,
+        "username": "ali",
+        "email": "ali@example.com",
+        "admin": False,
+        "firstName": "Ali",
+        "lastName": "Updated",
+    }
+
+    def fake_update_user_profile(**kwargs):
+        assert kwargs == {
+            "user_uuid": "123e4567-e89b-12d3-a456-426614174000",
+            "email": "ali@example.com",
+            "username": "ali",
+            "first_name": "Ali",
+            "last_name": "Updated",
+        }
+        return profile
+
+    monkeypatch.setattr("ali_api.schema.update_user_profile", fake_update_user_profile)
+    event = {
+        "arguments": {
+            "input": {
+                "username": "ali",
+                "firstName": "Ali",
+                "lastName": "Updated",
+            }
+        },
+        "info": {"fieldName": "updateUser", "parentTypeName": "Mutation"},
+        "identity": {
+            "claims": {
+                "sub": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "ali@example.com",
+            }
+        },
+    }
+
+    assert lambda_handler(event, context=None) == profile
