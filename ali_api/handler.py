@@ -11,6 +11,7 @@ from graphql import graphql_sync
 from ali_api.db import create_user_profile
 from ali_api.tmdb import search_movies
 from ali_api.schema import (
+    build_add_like_response,
     build_hello_response,
     build_update_user_response,
     build_user_profile_response,
@@ -91,6 +92,9 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
         return build_update_user_response(
             _appsync_claims(event), arguments.get("input") or {}
         )
+
+    if field_name == "addLike":
+        return build_add_like_response(_appsync_claims(event), arguments.get("movieId"))
 
     raise ValueError(f"Unsupported AppSync field: {field_name}")
 

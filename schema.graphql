@@ -12,6 +12,7 @@ type Query {
 
 type Mutation {
   updateUser(input: UpdateUserProfileInput!): UserProfile!
+  addLike(movieId: Int!): MovieLike!
 }
 
 input UpdateUserProfileInput {
@@ -36,6 +37,12 @@ type Users {
 
 type Movies {
   search(query: String!): [MovieSearchResult!]!
+}
+
+type MovieLike {
+  userId: Int!
+  movieId: Int!
+  createdAt: String!
 }
 
 type MovieSearchResult {

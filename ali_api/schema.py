@@ -5,7 +5,7 @@ from typing import Any
 
 from graphql import GraphQLResolveInfo, build_schema
 
-from ali_api.db import get_or_create_user_profile, get_postgres_now, update_user_profile
+from ali_api.db import add_movie_like, get_or_create_user_profile, get_postgres_now, update_user_profile
 from ali_api.tmdb import search_movies
 
 
@@ -64,6 +64,15 @@ def resolve_update_user(
     return build_update_user_response(claims, input)
 
 
+def resolve_add_like(
+    _source: Any,
+    info: GraphQLResolveInfo,
+    movieId: int,
+) -> dict[str, Any]:
+    claims = _identity_claims(info.context or {})
+    return build_add_like_response(claims, movieId)
+
+
 def build_user_profile_response(claims: dict[str, Any]) -> dict[str, Any]:
     user_uuid = claims.get("sub")
     email = claims.get("email")
@@ -75,6 +84,21 @@ def build_user_profile_response(claims: dict[str, Any]) -> dict[str, Any]:
         email=str(email),
         first_name=_optional_claim(claims, "given_name"),
         last_name=_optional_claim(claims, "family_name"),
+    )
+
+
+def build_add_like_response(claims: dict[str, Any], movie_id: int) -> dict[str, Any]:
+    user_uuid = claims.get("sub")
+    email = claims.get("email")
+    if not user_uuid or not email:
+        raise RuntimeError("Authenticated user identity is missing sub or email.")
+    if not isinstance(movie_id, int):
+        raise RuntimeError("Movie ID is required.")
+
+    return add_movie_like(
+        user_uuid=str(user_uuid),
+        email=str(email),
+        movie_id=movie_id,
     )
 
 
@@ -147,4 +171,5 @@ query_type.fields["movies"].resolve = resolve_movies
 users_type.fields["profile"].resolve = resolve_profile
 movies_type.fields["search"].resolve = resolve_movie_search
 mutation_type.fields["updateUser"].resolve = resolve_update_user
+mutation_type.fields["addLike"].resolve = resolve_add_like
 

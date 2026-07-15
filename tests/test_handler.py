@@ -237,3 +237,33 @@ def test_appsync_movie_search_resolver(monkeypatch) -> None:
     }
 
     assert lambda_handler(event, context=None) == results
+
+
+def test_appsync_add_like_resolver(monkeypatch) -> None:
+    like = {
+        "userId": 1,
+        "movieId": 343611,
+        "createdAt": "2026-07-14T12:34:56+00:00",
+    }
+
+    def fake_add_movie_like(**kwargs):
+        assert kwargs == {
+            "user_uuid": "123e4567-e89b-12d3-a456-426614174000",
+            "email": "ali@example.com",
+            "movie_id": 343611,
+        }
+        return like
+
+    monkeypatch.setattr("ali_api.schema.add_movie_like", fake_add_movie_like)
+    event = {
+        "arguments": {"movieId": 343611},
+        "info": {"fieldName": "addLike", "parentTypeName": "Mutation"},
+        "identity": {
+            "claims": {
+                "sub": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "ali@example.com",
+            }
+        },
+    }
+
+    assert lambda_handler(event, context=None) == like

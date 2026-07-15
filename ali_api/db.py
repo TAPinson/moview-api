@@ -107,6 +107,75 @@ def _user_profile_from_row(row: Any) -> dict[str, Any]:
     }
 
 
+def add_movie_like(
+    *,
+    user_uuid: str,
+    email: str,
+    movie_id: int,
+) -> dict[str, Any]:
+    username = f"user-{user_uuid}"
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                """
+                select id from users
+                where email = %s or username = %s
+                order by id
+                limit 1
+                """,
+                (email, username),
+            )
+            user_row = cursor.fetchone()
+            if user_row is None:
+                raise RuntimeError("User profile was not found.")
+
+            user_id = user_row[0]
+            cursor.execute(
+                """
+                insert into movie_likes (user_id, movie_id)
+                values (%s, %s)
+                on conflict (user_id, movie_id) do nothing
+                """,
+                (user_id, movie_id),
+            )
+            cursor.execute(
+                """
+                select user_id, movie_id, created_at
+                from movie_likes
+                where user_id = %s and movie_id = %s
+                """,
+                (user_id, movie_id),
+            )
+            like_row = cursor.fetchone()
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    if like_row is None:
+        raise RuntimeError("Movie like was not created.")
+
+    return _movie_like_from_row(like_row)
+
+
+def _movie_like_from_row(row: Any) -> dict[str, Any]:
+    created_at = row[2]
+    if hasattr(created_at, "isoformat"):
+        created_at = created_at.isoformat()
+
+    return {
+        "userId": row[0],
+        "movieId": row[1],
+        "createdAt": created_at,
+    }
+
+
 def update_user_profile(
     *,
     user_uuid: str,

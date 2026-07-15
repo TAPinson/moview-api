@@ -76,6 +76,7 @@ Resources:
 
         type Mutation {
           updateUser(input: UpdateUserProfileInput!): UserProfile!
+          addLike(movieId: Int!): MovieLike!
         }
 
         input UpdateUserProfileInput {
@@ -100,6 +101,12 @@ Resources:
 
         type Movies {
           search(query: String!): [MovieSearchResult!]!
+        }
+
+        type MovieLike {
+          userId: Int!
+          movieId: Int!
+          createdAt: String!
         }
 
         type MovieSearchResult {
@@ -293,6 +300,23 @@ Resources:
       ApiId: !GetAtt MoviewGraphQLApi.ApiId
       TypeName: Mutation
       FieldName: updateUser
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  AddLikeResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn:
+      - MoviewGraphQLSchema
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: addLike
       DataSourceName: !GetAtt MoviewLambdaDataSource.Name
       RequestMappingTemplate: |
         {
