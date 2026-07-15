@@ -267,3 +267,130 @@ def test_appsync_add_like_resolver(monkeypatch) -> None:
     }
 
     assert lambda_handler(event, context=None) == like
+
+
+def test_appsync_watchlist_resolver(monkeypatch) -> None:
+    items = [
+        {
+            "userId": 1,
+            "movieId": 343611,
+            "status": "want_to_watch",
+            "addedAt": "2026-07-14T12:00:00+00:00",
+            "watchedAt": None,
+            "notes": None,
+        }
+    ]
+
+    def fake_get_watchlist(**kwargs):
+        assert kwargs == {
+            "user_uuid": "123e4567-e89b-12d3-a456-426614174000",
+            "email": "ali@example.com",
+            "status": "want_to_watch",
+        }
+        return items
+
+    monkeypatch.setattr("ali_api.schema.get_watchlist", fake_get_watchlist)
+    event = {
+        "arguments": {"status": "want_to_watch"},
+        "info": {"fieldName": "watchlist", "parentTypeName": "Users"},
+        "identity": {
+            "claims": {
+                "sub": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "ali@example.com",
+            }
+        },
+    }
+
+    assert lambda_handler(event, context=None) == items
+
+
+def test_appsync_add_to_watchlist_resolver(monkeypatch) -> None:
+    item = {
+        "userId": 1,
+        "movieId": 343611,
+        "status": "want_to_watch",
+        "addedAt": "2026-07-14T12:00:00+00:00",
+        "watchedAt": None,
+        "notes": None,
+    }
+
+    def fake_add_to_watchlist(**kwargs):
+        assert kwargs == {
+            "user_uuid": "123e4567-e89b-12d3-a456-426614174000",
+            "email": "ali@example.com",
+            "movie_id": 343611,
+        }
+        return item
+
+    monkeypatch.setattr("ali_api.schema.add_to_watchlist", fake_add_to_watchlist)
+    event = {
+        "arguments": {"movieId": 343611},
+        "info": {"fieldName": "addToWatchlist", "parentTypeName": "Mutation"},
+        "identity": {
+            "claims": {
+                "sub": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "ali@example.com",
+            }
+        },
+    }
+
+    assert lambda_handler(event, context=None) == item
+
+
+def test_appsync_mark_watched_resolver(monkeypatch) -> None:
+    item = {
+        "userId": 1,
+        "movieId": 343611,
+        "status": "watched",
+        "addedAt": "2026-07-14T12:00:00+00:00",
+        "watchedAt": "2026-07-14T13:00:00+00:00",
+        "notes": None,
+    }
+
+    def fake_mark_movie_watched(**kwargs):
+        assert kwargs == {
+            "user_uuid": "123e4567-e89b-12d3-a456-426614174000",
+            "email": "ali@example.com",
+            "movie_id": 343611,
+        }
+        return item
+
+    monkeypatch.setattr("ali_api.schema.mark_movie_watched", fake_mark_movie_watched)
+    event = {
+        "arguments": {"movieId": 343611},
+        "info": {"fieldName": "markWatched", "parentTypeName": "Mutation"},
+        "identity": {
+            "claims": {
+                "sub": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "ali@example.com",
+            }
+        },
+    }
+
+    assert lambda_handler(event, context=None) == item
+
+
+def test_appsync_remove_from_watchlist_resolver(monkeypatch) -> None:
+    def fake_remove_from_watchlist(**kwargs):
+        assert kwargs == {
+            "user_uuid": "123e4567-e89b-12d3-a456-426614174000",
+            "email": "ali@example.com",
+            "movie_id": 343611,
+        }
+        return True
+
+    monkeypatch.setattr(
+        "ali_api.schema.remove_from_watchlist", fake_remove_from_watchlist
+    )
+    event = {
+        "arguments": {"movieId": 343611},
+        "info": {"fieldName": "removeFromWatchlist", "parentTypeName": "Mutation"},
+        "identity": {
+            "claims": {
+                "sub": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "ali@example.com",
+            }
+        },
+    }
+
+    assert lambda_handler(event, context=None) is True

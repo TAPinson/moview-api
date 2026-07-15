@@ -12,9 +12,13 @@ from ali_api.db import create_user_profile
 from ali_api.tmdb import search_movies
 from ali_api.schema import (
     build_add_like_response,
+    build_add_to_watchlist_response,
     build_hello_response,
+    build_mark_watched_response,
+    build_remove_from_watchlist_response,
     build_update_user_response,
     build_user_profile_response,
+    build_watchlist_response,
     schema,
 )
 
@@ -88,6 +92,9 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
     if field_name == "profile":
         return build_user_profile_response(_appsync_claims(event))
 
+    if field_name == "watchlist":
+        return build_watchlist_response(_appsync_claims(event), arguments.get("status"))
+
     if field_name == "updateUser":
         return build_update_user_response(
             _appsync_claims(event), arguments.get("input") or {}
@@ -95,6 +102,19 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
 
     if field_name == "addLike":
         return build_add_like_response(_appsync_claims(event), arguments.get("movieId"))
+
+    if field_name == "addToWatchlist":
+        return build_add_to_watchlist_response(
+            _appsync_claims(event), arguments.get("movieId")
+        )
+
+    if field_name == "markWatched":
+        return build_mark_watched_response(_appsync_claims(event), arguments.get("movieId"))
+
+    if field_name == "removeFromWatchlist":
+        return build_remove_from_watchlist_response(
+            _appsync_claims(event), arguments.get("movieId")
+        )
 
     raise ValueError(f"Unsupported AppSync field: {field_name}")
 

@@ -77,6 +77,9 @@ Resources:
         type Mutation {
           updateUser(input: UpdateUserProfileInput!): UserProfile!
           addLike(movieId: Int!): MovieLike!
+          addToWatchlist(movieId: Int!): WatchlistItem!
+          markWatched(movieId: Int!): WatchlistItem!
+          removeFromWatchlist(movieId: Int!): Boolean!
         }
 
         input UpdateUserProfileInput {
@@ -97,10 +100,26 @@ Resources:
 
         type Users {
           profile: UserProfile!
+          watchlist(status: WatchlistStatus): [WatchlistItem!]!
         }
 
         type Movies {
           search(query: String!): [MovieSearchResult!]!
+        }
+
+        enum WatchlistStatus {
+          want_to_watch
+          watching
+          watched
+        }
+
+        type WatchlistItem {
+          userId: Int!
+          movieId: Int!
+          status: WatchlistStatus!
+          addedAt: String!
+          watchedAt: String
+          notes: String
         }
 
         type MovieLike {
@@ -317,6 +336,74 @@ Resources:
       ApiId: !GetAtt MoviewGraphQLApi.ApiId
       TypeName: Mutation
       FieldName: addLike
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  UsersWatchlistResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn:
+      - MoviewGraphQLSchema
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Users
+      FieldName: watchlist
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  AddToWatchlistResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn:
+      - MoviewGraphQLSchema
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: addToWatchlist
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  MarkWatchedResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn:
+      - MoviewGraphQLSchema
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: markWatched
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  RemoveFromWatchlistResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn:
+      - MoviewGraphQLSchema
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: removeFromWatchlist
       DataSourceName: !GetAtt MoviewLambdaDataSource.Name
       RequestMappingTemplate: |
         {

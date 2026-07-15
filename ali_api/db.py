@@ -176,6 +176,175 @@ def _movie_like_from_row(row: Any) -> dict[str, Any]:
     }
 
 
+def get_watchlist(
+    *,
+    user_uuid: str,
+    email: str,
+    status: str | None = None,
+) -> list[dict[str, Any]]:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            if status:
+                cursor.execute(
+                    """
+                    select user_id, movie_id, status, added_at, watched_at, notes
+                    from movie_watchlist
+                    where user_id = %s and status = %s
+                    order by added_at desc
+                    """,
+                    (user_id, status),
+                )
+            else:
+                cursor.execute(
+                    """
+                    select user_id, movie_id, status, added_at, watched_at, notes
+                    from movie_watchlist
+                    where user_id = %s
+                    order by added_at desc
+                    """,
+                    (user_id,),
+                )
+            rows = cursor.fetchall()
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    return [_watchlist_item_from_row(row) for row in rows]
+
+
+def add_to_watchlist(
+    *,
+    user_uuid: str,
+    email: str,
+    movie_id: int,
+) -> dict[str, Any]:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    return _upsert_watchlist_item(user_id=user_id, movie_id=movie_id, status="want_to_watch")
+
+
+def mark_movie_watched(
+    *,
+    user_uuid: str,
+    email: str,
+    movie_id: int,
+) -> dict[str, Any]:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    return _upsert_watchlist_item(user_id=user_id, movie_id=movie_id, status="watched")
+
+
+def remove_from_watchlist(
+    *,
+    user_uuid: str,
+    email: str,
+    movie_id: int,
+) -> bool:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                """
+                delete from movie_watchlist
+                where user_id = %s and movie_id = %s
+                """,
+                (user_id, movie_id),
+            )
+            removed = cursor.rowcount > 0
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    return removed
+
+
+def _upsert_watchlist_item(*, user_id: int, movie_id: int, status: str) -> dict[str, Any]:
+    watched_at_sql = "now()" if status == "watched" else "null"
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                f"""
+                insert into movie_watchlist (user_id, movie_id, status, watched_at)
+                values (%s, %s, %s, {watched_at_sql})
+                on conflict (user_id, movie_id) do update
+                set status = excluded.status,
+                    watched_at = excluded.watched_at
+                returning user_id, movie_id, status, added_at, watched_at, notes
+                """,
+                (user_id, movie_id, status),
+            )
+            row = cursor.fetchone()
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    if row is None:
+        raise RuntimeError("Watchlist item was not saved.")
+
+    return _watchlist_item_from_row(row)
+
+
+def _user_id_for_identity(*, user_uuid: str, email: str) -> int:
+    username = f"user-{user_uuid}"
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                """
+                select id from users
+                where email = %s or username = %s
+                order by id
+                limit 1
+                """,
+                (email, username),
+            )
+            row = cursor.fetchone()
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    if row is None:
+        raise RuntimeError("User profile was not found.")
+
+    return row[0]
+
+
+def _watchlist_item_from_row(row: Any) -> dict[str, Any]:
+    added_at = row[3]
+    watched_at = row[4]
+    if hasattr(added_at, "isoformat"):
+        added_at = added_at.isoformat()
+    if hasattr(watched_at, "isoformat"):
+        watched_at = watched_at.isoformat()
+
+    return {
+        "userId": row[0],
+        "movieId": row[1],
+        "status": row[2],
+        "addedAt": added_at,
+        "watchedAt": watched_at,
+        "notes": row[5],
+    }
+
+
 def update_user_profile(
     *,
     user_uuid: str,

@@ -5,7 +5,16 @@ from typing import Any
 
 from graphql import GraphQLResolveInfo, build_schema
 
-from ali_api.db import add_movie_like, get_or_create_user_profile, get_postgres_now, update_user_profile
+from ali_api.db import (
+    add_movie_like,
+    add_to_watchlist,
+    get_or_create_user_profile,
+    get_postgres_now,
+    get_watchlist,
+    mark_movie_watched,
+    remove_from_watchlist,
+    update_user_profile,
+)
 from ali_api.tmdb import search_movies
 
 
@@ -55,6 +64,15 @@ def resolve_profile(_source: Any, info: GraphQLResolveInfo) -> dict[str, Any]:
     return build_user_profile_response(claims)
 
 
+def resolve_watchlist(
+    _source: Any,
+    info: GraphQLResolveInfo,
+    status: str | None = None,
+) -> list[dict[str, Any]]:
+    claims = _identity_claims(info.context or {})
+    return build_watchlist_response(claims, status)
+
+
 def resolve_update_user(
     _source: Any,
     info: GraphQLResolveInfo,
@@ -73,6 +91,33 @@ def resolve_add_like(
     return build_add_like_response(claims, movieId)
 
 
+def resolve_add_to_watchlist(
+    _source: Any,
+    info: GraphQLResolveInfo,
+    movieId: int,
+) -> dict[str, Any]:
+    claims = _identity_claims(info.context or {})
+    return build_add_to_watchlist_response(claims, movieId)
+
+
+def resolve_mark_watched(
+    _source: Any,
+    info: GraphQLResolveInfo,
+    movieId: int,
+) -> dict[str, Any]:
+    claims = _identity_claims(info.context or {})
+    return build_mark_watched_response(claims, movieId)
+
+
+def resolve_remove_from_watchlist(
+    _source: Any,
+    info: GraphQLResolveInfo,
+    movieId: int,
+) -> bool:
+    claims = _identity_claims(info.context or {})
+    return build_remove_from_watchlist_response(claims, movieId)
+
+
 def build_user_profile_response(claims: dict[str, Any]) -> dict[str, Any]:
     user_uuid = claims.get("sub")
     email = claims.get("email")
@@ -88,18 +133,63 @@ def build_user_profile_response(claims: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_add_like_response(claims: dict[str, Any], movie_id: int) -> dict[str, Any]:
+    user_uuid, email = _required_identity(claims)
+    movie_id = _required_movie_id(movie_id)
+
+    return add_movie_like(
+        user_uuid=user_uuid,
+        email=email,
+        movie_id=movie_id,
+    )
+
+
+def build_watchlist_response(
+    claims: dict[str, Any],
+    status: str | None,
+) -> list[dict[str, Any]]:
+    user_uuid, email = _required_identity(claims)
+    return get_watchlist(user_uuid=user_uuid, email=email, status=status)
+
+
+def build_add_to_watchlist_response(
+    claims: dict[str, Any],
+    movie_id: int,
+) -> dict[str, Any]:
+    user_uuid, email = _required_identity(claims)
+    movie_id = _required_movie_id(movie_id)
+    return add_to_watchlist(user_uuid=user_uuid, email=email, movie_id=movie_id)
+
+
+def build_mark_watched_response(
+    claims: dict[str, Any],
+    movie_id: int,
+) -> dict[str, Any]:
+    user_uuid, email = _required_identity(claims)
+    movie_id = _required_movie_id(movie_id)
+    return mark_movie_watched(user_uuid=user_uuid, email=email, movie_id=movie_id)
+
+
+def build_remove_from_watchlist_response(
+    claims: dict[str, Any],
+    movie_id: int,
+) -> bool:
+    user_uuid, email = _required_identity(claims)
+    movie_id = _required_movie_id(movie_id)
+    return remove_from_watchlist(user_uuid=user_uuid, email=email, movie_id=movie_id)
+
+
+def _required_identity(claims: dict[str, Any]) -> tuple[str, str]:
     user_uuid = claims.get("sub")
     email = claims.get("email")
     if not user_uuid or not email:
         raise RuntimeError("Authenticated user identity is missing sub or email.")
+    return str(user_uuid), str(email)
+
+
+def _required_movie_id(movie_id: int) -> int:
     if not isinstance(movie_id, int):
         raise RuntimeError("Movie ID is required.")
-
-    return add_movie_like(
-        user_uuid=str(user_uuid),
-        email=str(email),
-        movie_id=movie_id,
-    )
+    return movie_id
 
 
 def build_update_user_response(
@@ -169,7 +259,11 @@ query_type.fields["hello"].resolve = resolve_hello
 query_type.fields["users"].resolve = resolve_users
 query_type.fields["movies"].resolve = resolve_movies
 users_type.fields["profile"].resolve = resolve_profile
+users_type.fields["watchlist"].resolve = resolve_watchlist
 movies_type.fields["search"].resolve = resolve_movie_search
 mutation_type.fields["updateUser"].resolve = resolve_update_user
 mutation_type.fields["addLike"].resolve = resolve_add_like
+mutation_type.fields["addToWatchlist"].resolve = resolve_add_to_watchlist
+mutation_type.fields["markWatched"].resolve = resolve_mark_watched
+mutation_type.fields["removeFromWatchlist"].resolve = resolve_remove_from_watchlist
 

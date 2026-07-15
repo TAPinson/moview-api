@@ -13,6 +13,9 @@ type Query {
 type Mutation {
   updateUser(input: UpdateUserProfileInput!): UserProfile!
   addLike(movieId: Int!): MovieLike!
+  addToWatchlist(movieId: Int!): WatchlistItem!
+  markWatched(movieId: Int!): WatchlistItem!
+  removeFromWatchlist(movieId: Int!): Boolean!
 }
 
 input UpdateUserProfileInput {
@@ -33,10 +36,26 @@ type Greeting {
 
 type Users {
   profile: UserProfile!
+  watchlist(status: WatchlistStatus): [WatchlistItem!]!
 }
 
 type Movies {
   search(query: String!): [MovieSearchResult!]!
+}
+
+enum WatchlistStatus {
+  want_to_watch
+  watching
+  watched
+}
+
+type WatchlistItem {
+  userId: Int!
+  movieId: Int!
+  status: WatchlistStatus!
+  addedAt: String!
+  watchedAt: String
+  notes: String
 }
 
 type MovieLike {
