@@ -24,7 +24,7 @@ pytest
 
 ```bash
 python3 -m ali_api.handler events/http-graphql.json
-python3 -m ali_api.handler events/appsync-hello.json
+python3 -m ali_api.handler events/appsync-health.json
 ```
 
 ## Deploy with SAM
@@ -38,9 +38,9 @@ The SAM template deploys the Lambda function and configures AppSync in the same 
 
 - Cognito User Pool with email-based self sign-up and verification.
 - AppSync GraphQL API using Cognito User Pool authentication.
-- GraphQL schema for `Query.health` and `Query.hello`.
+- GraphQL schema for health, users, movies, likes, and watchlist operations.
 - Lambda data source connected to `MoviewApiFunction`.
-- Lambda resolvers for `Query.health` and `Query.hello`.
+- Lambda resolvers for AppSync query and mutation fields.
 
 After deploy, configure the UI with these stack outputs:
 
@@ -51,10 +51,10 @@ After deploy, configure the UI with these stack outputs:
 The AppSync endpoint requires a valid Cognito user token. In the AppSync query console, authenticate with a Cognito user and run:
 
 ```graphql
-query Hello {
-  hello(name: "Ali") {
-    message
-    requestId
+query Health {
+  health {
+    ok
+    service
   }
 }
 ```

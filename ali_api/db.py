@@ -11,27 +11,6 @@ from urllib.parse import parse_qs, unquote, urlparse
 DATABASE_URL_KEYS = ("DATABASE_URL", "database_url", "url")
 
 
-def get_postgres_now() -> str:
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute("select now()")
-            row = cursor.fetchone()
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
-
-    if row is None:
-        raise RuntimeError("Postgres did not return a timestamp.")
-
-    value = row[0]
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-
-    return str(value)
-
 
 def create_user_profile(
     *,

@@ -9,7 +9,6 @@ from ali_api.db import (
     add_movie_like,
     add_to_watchlist,
     get_or_create_user_profile,
-    get_postgres_now,
     get_watchlist,
     mark_movie_watched,
     remove_from_watchlist,
@@ -23,24 +22,6 @@ SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.graphql"
 
 def resolve_health(_source: Any, _info: GraphQLResolveInfo) -> dict[str, Any]:
     return {"ok": True, "service": "moview-api"}
-
-
-def resolve_hello(
-    _source: Any,
-    info: GraphQLResolveInfo,
-    name: str | None = None,
-) -> dict[str, Any]:
-    context = info.context or {}
-    lambda_context = context.get("lambda_context")
-    return build_hello_response(name, getattr(lambda_context, "aws_request_id", None))
-
-
-def build_hello_response(name: str | None, request_id: str | None) -> dict[str, Any]:
-    postgres_now = get_postgres_now()
-    return {
-        "message": f"Hello, {name or 'world'}! {postgres_now}",
-        "requestId": request_id,
-    }
 
 
 def resolve_users(_source: Any, _info: GraphQLResolveInfo) -> dict[str, Any]:
@@ -255,7 +236,6 @@ if mutation_type is None:
     raise RuntimeError("Schema is missing Mutation type.")
 
 query_type.fields["health"].resolve = resolve_health
-query_type.fields["hello"].resolve = resolve_hello
 query_type.fields["users"].resolve = resolve_users
 query_type.fields["movies"].resolve = resolve_movies
 users_type.fields["profile"].resolve = resolve_profile

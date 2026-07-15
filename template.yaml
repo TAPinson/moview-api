@@ -69,7 +69,6 @@ Resources:
 
         type Query {
           health: Health!
-          hello(name: String): Greeting!
           users: Users!
           movies: Movies!
         }
@@ -91,11 +90,6 @@ Resources:
         type Health {
           ok: Boolean!
           service: String!
-        }
-
-        type Greeting {
-          message: String!
-          requestId: String
         }
 
         type Users {
@@ -217,23 +211,6 @@ Resources:
       ApiId: !GetAtt MoviewGraphQLApi.ApiId
       TypeName: Query
       FieldName: health
-      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
-      RequestMappingTemplate: |
-        {
-          "version": "2017-02-28",
-          "operation": "Invoke",
-          "payload": $util.toJson($context)
-        }
-      ResponseMappingTemplate: $util.toJson($context.result)
-
-  HelloResolver:
-    Type: AWS::AppSync::Resolver
-    DependsOn:
-      - MoviewGraphQLSchema
-    Properties:
-      ApiId: !GetAtt MoviewGraphQLApi.ApiId
-      TypeName: Query
-      FieldName: hello
       DataSourceName: !GetAtt MoviewLambdaDataSource.Name
       RequestMappingTemplate: |
         {

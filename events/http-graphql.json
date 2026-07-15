@@ -11,6 +11,6 @@
       "path": "/graphql"
     }
   },
-  "body": "{\"query\":\"query Hello($name: String) { hello(name: $name) { message requestId } }\",\"variables\":{\"name\":\"Ali\"}}",
+  "body": "{\"query\": \"{ health { ok service } }\"}",
   "isBase64Encoded": false
 }

@@ -1,39 +1,8 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
-
 from ali_api.handler import lambda_handler
 
-
-def test_http_graphql_hello(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "ali_api.schema.get_postgres_now", lambda: "2026-07-13 12:34:56+00"
-    )
-
-    event = {
-        "requestContext": {"http": {"method": "POST"}},
-        "body": json.dumps(
-            {
-                "query": "query Hello($name: String) { hello(name: $name) { message requestId } }",
-                "variables": {"name": "Ali"},
-            }
-        ),
-    }
-    context = SimpleNamespace(aws_request_id="request-123")
-
-    response = lambda_handler(event, context)
-
-    assert response["statusCode"] == 200
-    body = json.loads(response["body"])
-    assert body == {
-        "data": {
-            "hello": {
-                "message": "Hello, Ali! 2026-07-13 12:34:56+00",
-                "requestId": "request-123",
-            }
-        }
-    }
 
 
 def test_http_graphql_health() -> None:
@@ -48,24 +17,6 @@ def test_http_graphql_health() -> None:
     body = json.loads(response["body"])
     assert body == {"data": {"health": {"ok": True, "service": "moview-api"}}}
 
-
-def test_appsync_hello_resolver(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "ali_api.schema.get_postgres_now", lambda: "2026-07-13 12:34:56+00"
-    )
-
-    event = {
-        "arguments": {"name": "Ali"},
-        "info": {"fieldName": "hello", "parentTypeName": "Query"},
-    }
-    context = SimpleNamespace(aws_request_id="request-123")
-
-    response = lambda_handler(event, context)
-
-    assert response == {
-        "message": "Hello, Ali! 2026-07-13 12:34:56+00",
-        "requestId": "request-123",
-    }
 
 
 def test_appsync_health_resolver() -> None:

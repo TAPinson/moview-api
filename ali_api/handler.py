@@ -13,7 +13,6 @@ from ali_api.tmdb import search_movies
 from ali_api.schema import (
     build_add_like_response,
     build_add_to_watchlist_response,
-    build_hello_response,
     build_mark_watched_response,
     build_remove_from_watchlist_response,
     build_update_user_response,
@@ -76,9 +75,6 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
 
     if field_name == "health":
         return {"ok": True, "service": "moview-api"}
-
-    if field_name == "hello":
-        return build_hello_response(arguments.get("name"), _aws_request_id(context))
 
     if field_name == "users":
         return {}
@@ -220,10 +216,6 @@ def _format_graphql_error(error: Any) -> JsonObject:
     if error.path:
         formatted["path"] = error.path
     return formatted
-
-
-def _aws_request_id(context: Any) -> str | None:
-    return getattr(context, "aws_request_id", None)
 
 
 def main() -> None:
