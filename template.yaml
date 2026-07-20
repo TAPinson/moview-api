@@ -114,6 +114,7 @@ Resources:
           addedAt: String!
           watchedAt: String
           notes: String
+          movie: MovieSearchResult
         }
 
         type MovieLike {

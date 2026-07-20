@@ -231,6 +231,22 @@ def test_appsync_watchlist_resolver(monkeypatch) -> None:
             "notes": None,
         }
     ]
+    movie = {
+        "poster_path": "/IfB9hy4JH1eH6HEfIgIGORXi5h.jpg",
+        "adult": False,
+        "overview": "Jack Reacher must uncover the truth.",
+        "release_date": "2016-10-19",
+        "genre_ids": [53, 28],
+        "id": 343611,
+        "original_title": "Jack Reacher: Never Go Back",
+        "original_language": "en",
+        "title": "Jack Reacher: Never Go Back",
+        "backdrop_path": "/4ynQYtSEuU5hyipcGkfD6ncwtwz.jpg",
+        "popularity": 26.818468,
+        "vote_count": 201,
+        "video": False,
+        "vote_average": 4.19,
+    }
 
     def fake_get_watchlist(**kwargs):
         assert kwargs == {
@@ -240,7 +256,12 @@ def test_appsync_watchlist_resolver(monkeypatch) -> None:
         }
         return items
 
+    def fake_get_movie_details(movie_id: int):
+        assert movie_id == 343611
+        return movie
+
     monkeypatch.setattr("ali_api.schema.get_watchlist", fake_get_watchlist)
+    monkeypatch.setattr("ali_api.schema.get_movie_details", fake_get_movie_details)
     event = {
         "arguments": {"status": "want_to_watch"},
         "info": {"fieldName": "watchlist", "parentTypeName": "Users"},
@@ -252,7 +273,7 @@ def test_appsync_watchlist_resolver(monkeypatch) -> None:
         },
     }
 
-    assert lambda_handler(event, context=None) == items
+    assert lambda_handler(event, context=None) == [{**items[0], "movie": movie}]
 
 
 def test_appsync_add_to_watchlist_resolver(monkeypatch) -> None:

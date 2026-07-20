@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
+TMDB_MOVIE_URL = "https://api.themoviedb.org/3/movie"
 TMDB_SEARCH_URL = "https://api.themoviedb.org/3/search/movie"
 TMDB_SECRET_KEYS = ("TMDB_API_KEY", "tmdb_api_key", "tmdbApiKey", "api_key", "apiKey", "api-key", "key")
 
@@ -33,13 +34,29 @@ def search_movies(query: str) -> list[dict[str, Any]]:
     return [_movie_result(result) for result in results if isinstance(result, dict)]
 
 
+def get_movie_details(movie_id: int) -> dict[str, Any]:
+    params = urlencode({"api_key": _tmdb_api_key()})
+    request = Request(
+        f"{TMDB_MOVIE_URL}/{movie_id}?{params}",
+        headers={"accept": "application/json", "user-agent": "moview-api"},
+    )
+
+    with urlopen(request, timeout=10) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+
+    if not isinstance(payload, dict):
+        raise RuntimeError("TMDB movie details response was not an object.")
+
+    return _movie_result(payload)
+
+
 def _movie_result(result: dict[str, Any]) -> dict[str, Any]:
     return {
         "poster_path": result.get("poster_path"),
         "adult": result.get("adult"),
         "overview": result.get("overview"),
         "release_date": result.get("release_date"),
-        "genre_ids": result.get("genre_ids") or [],
+        "genre_ids": _genre_ids(result),
         "id": result.get("id"),
         "original_title": result.get("original_title"),
         "original_language": result.get("original_language"),
@@ -50,6 +67,22 @@ def _movie_result(result: dict[str, Any]) -> dict[str, Any]:
         "video": result.get("video"),
         "vote_average": result.get("vote_average"),
     }
+
+
+def _genre_ids(result: dict[str, Any]) -> list[int]:
+    genre_ids = result.get("genre_ids")
+    if isinstance(genre_ids, list):
+        return [genre_id for genre_id in genre_ids if isinstance(genre_id, int)]
+
+    genres = result.get("genres")
+    if not isinstance(genres, list):
+        return []
+
+    return [
+        genre.get("id")
+        for genre in genres
+        if isinstance(genre, dict) and isinstance(genre.get("id"), int)
+    ]
 
 
 def _tmdb_api_key() -> str:

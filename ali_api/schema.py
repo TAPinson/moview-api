@@ -14,7 +14,7 @@ from ali_api.db import (
     remove_from_watchlist,
     update_user_profile,
 )
-from ali_api.tmdb import search_movies
+from ali_api.tmdb import get_movie_details, search_movies
 
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.graphql"
@@ -129,7 +129,12 @@ def build_watchlist_response(
     status: str | None,
 ) -> list[dict[str, Any]]:
     user_uuid, email = _required_identity(claims)
-    return get_watchlist(user_uuid=user_uuid, email=email, status=status)
+    items = get_watchlist(user_uuid=user_uuid, email=email, status=status)
+    return [_with_movie_details(item) for item in items]
+
+
+def _with_movie_details(item: dict[str, Any]) -> dict[str, Any]:
+    return {**item, "movie": get_movie_details(item["movieId"])}
 
 
 def build_add_to_watchlist_response(
