@@ -35,16 +35,18 @@ def search_movies(query: str) -> list[dict[str, Any]]:
     return [_movie_result(result) for result in results if isinstance(result, dict)]
 
 
-def discover_movies_by_genre(genre_id: int) -> list[dict[str, Any]]:
+def discover_movies_by_genre(genre_id: int, page: int = 1) -> dict[str, Any]:
     if not isinstance(genre_id, int) or genre_id <= 0:
         raise ValueError("Genre ID must be a positive integer.")
+    if not isinstance(page, int) or page < 1 or page > 500:
+        raise ValueError("Page must be between 1 and 500.")
 
     params = urlencode({
         "with_genres": genre_id,
         "sort_by": "popularity.desc",
         "include_adult": "false",
         "include_video": "false",
-        "page": 1,
+        "page": page,
         "api_key": _tmdb_api_key(),
     })
     request = Request(
@@ -57,9 +59,15 @@ def discover_movies_by_genre(genre_id: int) -> list[dict[str, Any]]:
 
     results = payload.get("results", [])
     if not isinstance(results, list):
-        return []
+        results = []
 
-    return [_movie_result(result) for result in results if isinstance(result, dict)]
+    return {
+        "page": payload.get("page", page),
+        "totalPages": payload.get("total_pages", 1),
+        "results": [
+            _movie_result(result) for result in results if isinstance(result, dict)
+        ],
+    }
 
 
 def get_movie_details(movie_id: int) -> dict[str, Any]:

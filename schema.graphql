@@ -38,7 +38,7 @@ type Users {
 
 type Movies {
   search(query: String!): [MovieSearchResult!]!
-  byGenre(genreId: Int!): [MovieSearchResult!]!
+  byGenre(genreId: Int!, page: Int!): MovieResultPage!
 }
 
 enum WatchlistStatus {
@@ -68,6 +68,12 @@ type MovieLike {
   movieId: Int!
   createdAt: String!
   movie: MovieSearchResult
+}
+
+type MovieResultPage {
+  page: Int!
+  totalPages: Int!
+  results: [MovieSearchResult!]!
 }
 
 type MovieSearchResult {

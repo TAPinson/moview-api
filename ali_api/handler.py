@@ -89,7 +89,9 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
         return search_movies(arguments.get("query") or "")
 
     if field_name == "byGenre":
-        return discover_movies_by_genre(arguments.get("genreId"))
+        return discover_movies_by_genre(
+            arguments.get("genreId"), arguments.get("page", 1)
+        )
 
     if field_name == "profile":
         return build_user_profile_response(_appsync_claims(event))

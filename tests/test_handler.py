@@ -191,17 +191,22 @@ def test_appsync_movie_search_resolver(monkeypatch) -> None:
 
 
 def test_appsync_movies_by_genre_resolver(monkeypatch) -> None:
-    results = [{"id": 550, "title": "Fight Club", "genre_ids": [18]}]
+    results = {
+        "page": 2,
+        "totalPages": 10,
+        "results": [{"id": 550, "title": "Fight Club", "genre_ids": [18]}],
+    }
 
-    def fake_discover_movies_by_genre(genre_id: int):
+    def fake_discover_movies_by_genre(genre_id: int, page: int):
         assert genre_id == 18
+        assert page == 2
         return results
 
     monkeypatch.setattr(
         "ali_api.handler.discover_movies_by_genre", fake_discover_movies_by_genre
     )
     event = {
-        "arguments": {"genreId": 18},
+        "arguments": {"genreId": 18, "page": 2},
         "info": {"fieldName": "byGenre", "parentTypeName": "Movies"},
     }
 
