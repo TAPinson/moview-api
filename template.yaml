@@ -102,6 +102,7 @@ Resources:
 
         type Movies {
           search(query: String!): [MovieSearchResult!]!
+          byGenre(genreId: Int!): [MovieSearchResult!]!
         }
 
         enum WatchlistStatus {
@@ -273,6 +274,23 @@ Resources:
       ApiId: !GetAtt MoviewGraphQLApi.ApiId
       TypeName: Movies
       FieldName: search
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  MoviesByGenreResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn:
+      - MoviewGraphQLSchema
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Movies
+      FieldName: byGenre
       DataSourceName: !GetAtt MoviewLambdaDataSource.Name
       RequestMappingTemplate: |
         {

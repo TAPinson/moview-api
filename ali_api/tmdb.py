@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 
 TMDB_MOVIE_URL = "https://api.themoviedb.org/3/movie"
 TMDB_SEARCH_URL = "https://api.themoviedb.org/3/search/movie"
+TMDB_DISCOVER_URL = "https://api.themoviedb.org/3/discover/movie"
 TMDB_SECRET_KEYS = ("TMDB_API_KEY", "tmdb_api_key", "tmdbApiKey", "api_key", "apiKey", "api-key", "key")
 
 
@@ -21,6 +22,33 @@ def search_movies(query: str) -> list[dict[str, Any]]:
     params = urlencode({"query": normalized_query, "api_key": _tmdb_api_key()})
     request = Request(
         f"{TMDB_SEARCH_URL}?{params}",
+        headers={"accept": "application/json", "user-agent": "moview-api"},
+    )
+
+    with urlopen(request, timeout=10) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+
+    results = payload.get("results", [])
+    if not isinstance(results, list):
+        return []
+
+    return [_movie_result(result) for result in results if isinstance(result, dict)]
+
+
+def discover_movies_by_genre(genre_id: int) -> list[dict[str, Any]]:
+    if not isinstance(genre_id, int) or genre_id <= 0:
+        raise ValueError("Genre ID must be a positive integer.")
+
+    params = urlencode({
+        "with_genres": genre_id,
+        "sort_by": "popularity.desc",
+        "include_adult": "false",
+        "include_video": "false",
+        "page": 1,
+        "api_key": _tmdb_api_key(),
+    })
+    request = Request(
+        f"{TMDB_DISCOVER_URL}?{params}",
         headers={"accept": "application/json", "user-agent": "moview-api"},
     )
 

@@ -190,6 +190,24 @@ def test_appsync_movie_search_resolver(monkeypatch) -> None:
     assert lambda_handler(event, context=None) == results
 
 
+def test_appsync_movies_by_genre_resolver(monkeypatch) -> None:
+    results = [{"id": 550, "title": "Fight Club", "genre_ids": [18]}]
+
+    def fake_discover_movies_by_genre(genre_id: int):
+        assert genre_id == 18
+        return results
+
+    monkeypatch.setattr(
+        "ali_api.handler.discover_movies_by_genre", fake_discover_movies_by_genre
+    )
+    event = {
+        "arguments": {"genreId": 18},
+        "info": {"fieldName": "byGenre", "parentTypeName": "Movies"},
+    }
+
+    assert lambda_handler(event, context=None) == results
+
+
 def test_appsync_add_like_resolver(monkeypatch) -> None:
     like = {
         "userId": 1,

@@ -17,7 +17,7 @@ from ali_api.db import (
     remove_from_watchlist,
     update_user_profile,
 )
-from ali_api.tmdb import get_movie_details, search_movies
+from ali_api.tmdb import discover_movies_by_genre, get_movie_details, search_movies
 
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.graphql"
@@ -41,6 +41,12 @@ def resolve_movie_search(
     query: str,
 ) -> list[dict[str, Any]]:
     return search_movies(query)
+
+
+def resolve_movies_by_genre(
+    _source: Any, _info: GraphQLResolveInfo, genreId: int
+) -> list[dict[str, Any]]:
+    return discover_movies_by_genre(genreId)
 
 
 def resolve_profile(_source: Any, info: GraphQLResolveInfo) -> dict[str, Any]:
@@ -298,6 +304,7 @@ users_type.fields["watchlist"].resolve = resolve_watchlist
 users_type.fields["watchlistEntries"].resolve = resolve_watchlist_entries
 users_type.fields["likes"].resolve = resolve_likes
 movies_type.fields["search"].resolve = resolve_movie_search
+movies_type.fields["byGenre"].resolve = resolve_movies_by_genre
 mutation_type.fields["updateUser"].resolve = resolve_update_user
 mutation_type.fields["addLike"].resolve = resolve_add_like
 mutation_type.fields["removeLike"].resolve = resolve_remove_like

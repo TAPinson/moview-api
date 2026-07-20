@@ -38,6 +38,7 @@ type Users {
 
 type Movies {
   search(query: String!): [MovieSearchResult!]!
+  byGenre(genreId: Int!): [MovieSearchResult!]!
 }
 
 enum WatchlistStatus {

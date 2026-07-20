@@ -9,7 +9,7 @@ from typing import Any
 from graphql import graphql_sync
 
 from ali_api.db import create_user_profile
-from ali_api.tmdb import search_movies
+from ali_api.tmdb import discover_movies_by_genre, search_movies
 from ali_api.schema import (
     build_add_like_response,
     build_add_to_watchlist_response,
@@ -87,6 +87,9 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
 
     if field_name == "search":
         return search_movies(arguments.get("query") or "")
+
+    if field_name == "byGenre":
+        return discover_movies_by_genre(arguments.get("genreId"))
 
     if field_name == "profile":
         return build_user_profile_response(_appsync_claims(event))
