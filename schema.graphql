@@ -12,6 +12,7 @@ type Query {
 type Mutation {
   updateUser(input: UpdateUserProfileInput!): UserProfile!
   addLike(movieId: Int!): MovieLike!
+  removeLike(movieId: Int!): Boolean!
   addToWatchlist(movieId: Int!): WatchlistItem!
   markWatched(movieId: Int!): WatchlistItem!
   removeFromWatchlist(movieId: Int!): Boolean!

@@ -143,6 +143,37 @@ def add_movie_like(
     return _movie_like_from_row(like_row)
 
 
+def remove_movie_like(
+    *,
+    user_uuid: str,
+    email: str,
+    movie_id: int,
+) -> bool:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                """
+                delete from movie_likes
+                where user_id = %s and movie_id = %s
+                """,
+                (user_id, movie_id),
+            )
+            removed = cursor.rowcount > 0
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    return removed
+
+
 def get_movie_likes(
     *,
     user_uuid: str,

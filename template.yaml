@@ -76,6 +76,7 @@ Resources:
         type Mutation {
           updateUser(input: UpdateUserProfileInput!): UserProfile!
           addLike(movieId: Int!): MovieLike!
+          removeLike(movieId: Int!): Boolean!
           addToWatchlist(movieId: Int!): WatchlistItem!
           markWatched(movieId: Int!): WatchlistItem!
           removeFromWatchlist(movieId: Int!): Boolean!
@@ -323,6 +324,23 @@ Resources:
       ApiId: !GetAtt MoviewGraphQLApi.ApiId
       TypeName: Mutation
       FieldName: addLike
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  RemoveLikeResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn:
+      - MoviewGraphQLSchema
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: removeLike
       DataSourceName: !GetAtt MoviewLambdaDataSource.Name
       RequestMappingTemplate: |
         {

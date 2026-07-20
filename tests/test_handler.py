@@ -220,6 +220,30 @@ def test_appsync_add_like_resolver(monkeypatch) -> None:
     assert lambda_handler(event, context=None) == like
 
 
+def test_appsync_remove_like_resolver(monkeypatch) -> None:
+    def fake_remove_movie_like(**kwargs):
+        assert kwargs == {
+            "user_uuid": "123e4567-e89b-12d3-a456-426614174000",
+            "email": "ali@example.com",
+            "movie_id": 343611,
+        }
+        return True
+
+    monkeypatch.setattr("ali_api.schema.remove_movie_like", fake_remove_movie_like)
+    event = {
+        "arguments": {"movieId": 343611},
+        "info": {"fieldName": "removeLike", "parentTypeName": "Mutation"},
+        "identity": {
+            "claims": {
+                "sub": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "ali@example.com",
+            }
+        },
+    }
+
+    assert lambda_handler(event, context=None) is True
+
+
 def test_appsync_likes_resolver(monkeypatch) -> None:
     likes = [
         {

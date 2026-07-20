@@ -15,6 +15,7 @@ from ali_api.schema import (
     build_add_to_watchlist_response,
     build_likes_response,
     build_mark_watched_response,
+    build_remove_like_response,
     build_remove_from_watchlist_response,
     build_update_user_response,
     build_user_profile_response,
@@ -106,6 +107,9 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
 
     if field_name == "addLike":
         return build_add_like_response(_appsync_claims(event), arguments.get("movieId"))
+
+    if field_name == "removeLike":
+        return build_remove_like_response(_appsync_claims(event), arguments.get("movieId"))
 
     if field_name == "addToWatchlist":
         return build_add_to_watchlist_response(
