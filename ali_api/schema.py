@@ -7,9 +7,11 @@ from graphql import GraphQLResolveInfo, build_schema
 
 from ali_api.db import (
     add_movie_like,
+    get_movie_likes,
     add_to_watchlist,
     get_or_create_user_profile,
     get_watchlist,
+    get_watchlist_entries,
     mark_movie_watched,
     remove_from_watchlist,
     update_user_profile,
@@ -52,6 +54,22 @@ def resolve_watchlist(
 ) -> list[dict[str, Any]]:
     claims = _identity_claims(info.context or {})
     return build_watchlist_response(claims, status)
+
+
+def resolve_watchlist_entries(
+    _source: Any,
+    info: GraphQLResolveInfo,
+) -> list[dict[str, Any]]:
+    claims = _identity_claims(info.context or {})
+    return build_watchlist_entries_response(claims)
+
+
+def resolve_likes(
+    _source: Any,
+    info: GraphQLResolveInfo,
+) -> list[dict[str, Any]]:
+    claims = _identity_claims(info.context or {})
+    return build_likes_response(claims)
 
 
 def resolve_update_user(
@@ -131,6 +149,17 @@ def build_watchlist_response(
     user_uuid, email = _required_identity(claims)
     items = get_watchlist(user_uuid=user_uuid, email=email, status=status)
     return [_with_movie_details(item) for item in items]
+
+
+def build_watchlist_entries_response(claims: dict[str, Any]) -> list[dict[str, Any]]:
+    user_uuid, email = _required_identity(claims)
+    return get_watchlist_entries(user_uuid=user_uuid, email=email)
+
+
+def build_likes_response(claims: dict[str, Any]) -> list[dict[str, Any]]:
+    user_uuid, email = _required_identity(claims)
+    likes = get_movie_likes(user_uuid=user_uuid, email=email)
+    return [_with_movie_details(like) for like in likes]
 
 
 def _with_movie_details(item: dict[str, Any]) -> dict[str, Any]:
@@ -245,6 +274,8 @@ query_type.fields["users"].resolve = resolve_users
 query_type.fields["movies"].resolve = resolve_movies
 users_type.fields["profile"].resolve = resolve_profile
 users_type.fields["watchlist"].resolve = resolve_watchlist
+users_type.fields["watchlistEntries"].resolve = resolve_watchlist_entries
+users_type.fields["likes"].resolve = resolve_likes
 movies_type.fields["search"].resolve = resolve_movie_search
 mutation_type.fields["updateUser"].resolve = resolve_update_user
 mutation_type.fields["addLike"].resolve = resolve_add_like

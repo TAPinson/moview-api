@@ -143,6 +143,34 @@ def add_movie_like(
     return _movie_like_from_row(like_row)
 
 
+def get_movie_likes(
+    *,
+    user_uuid: str,
+    email: str,
+) -> list[dict[str, Any]]:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                """
+                select user_id, movie_id, created_at
+                from movie_likes
+                where user_id = %s
+                order by created_at desc
+                """,
+                (user_id,),
+            )
+            rows = cursor.fetchall()
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    return [_movie_like_from_row(row) for row in rows]
+
+
 def _movie_like_from_row(row: Any) -> dict[str, Any]:
     created_at = row[2]
     if hasattr(created_at, "isoformat"):
@@ -193,6 +221,37 @@ def get_watchlist(
         connection.close()
 
     return [_watchlist_item_from_row(row) for row in rows]
+
+
+def get_watchlist_entries(
+    *,
+    user_uuid: str,
+    email: str,
+) -> list[dict[str, Any]]:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                """
+                select user_id, movie_id, status
+                from movie_watchlist
+                where user_id = %s
+                order by added_at desc
+                """,
+                (user_id,),
+            )
+            rows = cursor.fetchall()
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    return [
+        {"userId": row[0], "movieId": row[1], "status": row[2]}
+        for row in rows
+    ]
 
 
 def add_to_watchlist(

@@ -220,6 +220,58 @@ def test_appsync_add_like_resolver(monkeypatch) -> None:
     assert lambda_handler(event, context=None) == like
 
 
+def test_appsync_likes_resolver(monkeypatch) -> None:
+    likes = [
+        {
+            "userId": 1,
+            "movieId": 343611,
+            "createdAt": "2026-07-14T12:34:56+00:00",
+        }
+    ]
+    movie = {
+        "poster_path": "/IfB9hy4JH1eH6HEfIgIGORXi5h.jpg",
+        "adult": False,
+        "overview": "Jack Reacher must uncover the truth.",
+        "release_date": "2016-10-19",
+        "genre_ids": [53, 28],
+        "id": 343611,
+        "original_title": "Jack Reacher: Never Go Back",
+        "original_language": "en",
+        "title": "Jack Reacher: Never Go Back",
+        "backdrop_path": "/4ynQYtSEuU5hyipcGkfD6ncwtwz.jpg",
+        "popularity": 26.818468,
+        "vote_count": 201,
+        "video": False,
+        "vote_average": 4.19,
+    }
+
+    def fake_get_movie_likes(**kwargs):
+        assert kwargs == {
+            "user_uuid": "123e4567-e89b-12d3-a456-426614174000",
+            "email": "ali@example.com",
+        }
+        return likes
+
+    def fake_get_movie_details(movie_id: int):
+        assert movie_id == 343611
+        return movie
+
+    monkeypatch.setattr("ali_api.schema.get_movie_likes", fake_get_movie_likes)
+    monkeypatch.setattr("ali_api.schema.get_movie_details", fake_get_movie_details)
+    event = {
+        "arguments": {},
+        "info": {"fieldName": "likes", "parentTypeName": "Users"},
+        "identity": {
+            "claims": {
+                "sub": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "ali@example.com",
+            }
+        },
+    }
+
+    assert lambda_handler(event, context=None) == [{**likes[0], "movie": movie}]
+
+
 def test_appsync_watchlist_resolver(monkeypatch) -> None:
     items = [
         {
@@ -274,6 +326,36 @@ def test_appsync_watchlist_resolver(monkeypatch) -> None:
     }
 
     assert lambda_handler(event, context=None) == [{**items[0], "movie": movie}]
+
+
+def test_appsync_watchlist_entries_resolver(monkeypatch) -> None:
+    entries = [
+        {"userId": 1, "movieId": 343611, "status": "want_to_watch"},
+        {"userId": 1, "movieId": 550, "status": "watched"},
+    ]
+
+    def fake_get_watchlist_entries(**kwargs):
+        assert kwargs == {
+            "user_uuid": "123e4567-e89b-12d3-a456-426614174000",
+            "email": "ali@example.com",
+        }
+        return entries
+
+    monkeypatch.setattr(
+        "ali_api.schema.get_watchlist_entries", fake_get_watchlist_entries
+    )
+    event = {
+        "arguments": {},
+        "info": {"fieldName": "watchlistEntries", "parentTypeName": "Users"},
+        "identity": {
+            "claims": {
+                "sub": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "ali@example.com",
+            }
+        },
+    }
+
+    assert lambda_handler(event, context=None) == entries
 
 
 def test_appsync_add_to_watchlist_resolver(monkeypatch) -> None:

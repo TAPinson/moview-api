@@ -31,6 +31,8 @@ type Health {
 type Users {
   profile: UserProfile!
   watchlist(status: WatchlistStatus): [WatchlistItem!]!
+  watchlistEntries: [WatchlistEntry!]!
+  likes: [MovieLike!]!
 }
 
 type Movies {
@@ -53,10 +55,17 @@ type WatchlistItem {
   movie: MovieSearchResult
 }
 
+type WatchlistEntry {
+  userId: Int!
+  movieId: Int!
+  status: WatchlistStatus!
+}
+
 type MovieLike {
   userId: Int!
   movieId: Int!
   createdAt: String!
+  movie: MovieSearchResult
 }
 
 type MovieSearchResult {

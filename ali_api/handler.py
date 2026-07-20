@@ -13,10 +13,12 @@ from ali_api.tmdb import search_movies
 from ali_api.schema import (
     build_add_like_response,
     build_add_to_watchlist_response,
+    build_likes_response,
     build_mark_watched_response,
     build_remove_from_watchlist_response,
     build_update_user_response,
     build_user_profile_response,
+    build_watchlist_entries_response,
     build_watchlist_response,
     schema,
 )
@@ -90,6 +92,12 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
 
     if field_name == "watchlist":
         return build_watchlist_response(_appsync_claims(event), arguments.get("status"))
+
+    if field_name == "watchlistEntries":
+        return build_watchlist_entries_response(_appsync_claims(event))
+
+    if field_name == "likes":
+        return build_likes_response(_appsync_claims(event))
 
     if field_name == "updateUser":
         return build_update_user_response(
