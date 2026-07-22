@@ -11,7 +11,16 @@ from graphql import graphql_sync
 from ali_api.db import create_user_profile
 from ali_api.tmdb import discover_movies_by_genre, search_movies
 from ali_api.schema import (
+    build_accept_friend_request_response,
     build_add_like_response,
+    build_cancel_friend_request_response,
+    build_decline_friend_request_response,
+    build_friends_response,
+    build_incoming_friend_requests_response,
+    build_outgoing_friend_requests_response,
+    build_remove_friend_response,
+    build_send_friend_request_response,
+    build_user_search_response,
     build_add_to_watchlist_response,
     build_likes_response,
     build_mark_watched_response,
@@ -92,6 +101,33 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
         return discover_movies_by_genre(
             arguments.get("genreId"), arguments.get("page", 1)
         )
+
+    if field_name == "findUsers":
+        return build_user_search_response(_appsync_claims(event), arguments.get("query") or "")
+
+    if field_name == "friends":
+        return build_friends_response(_appsync_claims(event))
+
+    if field_name == "incomingFriendRequests":
+        return build_incoming_friend_requests_response(_appsync_claims(event))
+
+    if field_name == "outgoingFriendRequests":
+        return build_outgoing_friend_requests_response(_appsync_claims(event))
+
+    if field_name == "sendFriendRequest":
+        return build_send_friend_request_response(_appsync_claims(event), arguments.get("userId"))
+
+    if field_name == "acceptFriendRequest":
+        return build_accept_friend_request_response(_appsync_claims(event), arguments.get("userId"))
+
+    if field_name == "declineFriendRequest":
+        return build_decline_friend_request_response(_appsync_claims(event), arguments.get("userId"))
+
+    if field_name == "cancelFriendRequest":
+        return build_cancel_friend_request_response(_appsync_claims(event), arguments.get("userId"))
+
+    if field_name == "removeFriend":
+        return build_remove_friend_response(_appsync_claims(event), arguments.get("userId"))
 
     if field_name == "profile":
         return build_user_profile_response(_appsync_claims(event))

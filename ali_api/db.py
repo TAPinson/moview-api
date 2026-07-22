@@ -526,3 +526,339 @@ def _parse_database_url_secret(secret: str) -> str:
     raise RuntimeError(
         "Database URL secret must be plaintext or JSON with a DATABASE_URL field."
     )
+
+
+def search_users_for_friends(
+    *, user_uuid: str, email: str, query: str
+) -> list[dict[str, Any]]:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    normalized_query = query.strip()
+    if not normalized_query:
+        return []
+
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                """
+                select u.id, u.username, u.first_name, u.last_name
+                from users u
+                where u.id <> %s
+                  and u.username ilike %s
+                  and not exists (
+                    select 1
+                    from friendships f
+                    where f.user_low_id = least(cast(%s as integer), u.id)
+                      and f.user_high_id = greatest(cast(%s as integer), u.id)
+                  )
+                order by u.username
+                limit 20
+                """,
+                (user_id, f"%{normalized_query}%", user_id, user_id),
+            )
+            rows = cursor.fetchall()
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    return [_public_user_from_row(row) for row in rows]
+
+
+def get_friends(*, user_uuid: str, email: str) -> list[dict[str, Any]]:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    return _get_relationships(user_id=user_id, status="accepted")
+
+
+def get_incoming_friend_requests(
+    *, user_uuid: str, email: str
+) -> list[dict[str, Any]]:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    return _get_relationships(
+        user_id=user_id, status="pending", requested_by_current_user=False
+    )
+
+
+def get_outgoing_friend_requests(
+    *, user_uuid: str, email: str
+) -> list[dict[str, Any]]:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    return _get_relationships(
+        user_id=user_id, status="pending", requested_by_current_user=True
+    )
+
+
+def send_friend_request(
+    *, user_uuid: str, email: str, target_user_id: int
+) -> dict[str, Any]:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    target_user_id = _required_target_user_id(target_user_id)
+    if user_id == target_user_id:
+        raise RuntimeError("You cannot send a friend request to yourself.")
+
+    user_low_id = min(user_id, target_user_id)
+    user_high_id = max(user_id, target_user_id)
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute("select id from users where id = %s", (target_user_id,))
+            if cursor.fetchone() is None:
+                raise RuntimeError("User was not found.")
+            cursor.execute(
+                """
+                insert into friendships (
+                  user_low_id, user_high_id, requested_by_user_id, status
+                )
+                values (%s, %s, %s, 'pending')
+                on conflict (user_low_id, user_high_id) do nothing
+                returning created_at, updated_at
+                """,
+                (user_low_id, user_high_id, user_id),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError("A friend request or friendship already exists.")
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    return _relationship_with_user(
+        user_id=target_user_id,
+        status="pending",
+        created_at=row[0],
+        updated_at=row[1],
+    )
+
+
+def accept_friend_request(
+    *, user_uuid: str, email: str, requester_user_id: int
+) -> dict[str, Any]:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    requester_user_id = _required_target_user_id(requester_user_id)
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                """
+                update friendships
+                set status = 'accepted', updated_at = now()
+                where user_low_id = least(cast(%s as integer), cast(%s as integer))
+                  and user_high_id = greatest(cast(%s as integer), cast(%s as integer))
+                  and status = 'pending'
+                  and requested_by_user_id = cast(%s as integer)
+                  and requested_by_user_id <> cast(%s as integer)
+                returning created_at, updated_at
+                """,
+                (
+                    user_id,
+                    requester_user_id,
+                    user_id,
+                    requester_user_id,
+                    requester_user_id,
+                    user_id,
+                ),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError("Incoming friend request was not found.")
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    return _relationship_with_user(
+        user_id=requester_user_id,
+        status="accepted",
+        created_at=row[0],
+        updated_at=row[1],
+    )
+
+
+def decline_friend_request(
+    *, user_uuid: str, email: str, requester_user_id: int
+) -> bool:
+    return _delete_relationship(
+        user_uuid=user_uuid,
+        email=email,
+        target_user_id=requester_user_id,
+        status="pending",
+        requester_must_be_target=True,
+    )
+
+
+def cancel_friend_request(
+    *, user_uuid: str, email: str, target_user_id: int
+) -> bool:
+    return _delete_relationship(
+        user_uuid=user_uuid,
+        email=email,
+        target_user_id=target_user_id,
+        status="pending",
+        requester_must_be_current=True,
+    )
+
+
+def remove_friend(*, user_uuid: str, email: str, friend_user_id: int) -> bool:
+    return _delete_relationship(
+        user_uuid=user_uuid,
+        email=email,
+        target_user_id=friend_user_id,
+        status="accepted",
+    )
+
+
+def _get_relationships(
+    *,
+    user_id: int,
+    status: str,
+    requested_by_current_user: bool | None = None,
+) -> list[dict[str, Any]]:
+    requester_clause = ""
+    if requested_by_current_user is True:
+        requester_clause = "and f.requested_by_user_id = cast(%s as integer)"
+    elif requested_by_current_user is False:
+        requester_clause = "and f.requested_by_user_id <> cast(%s as integer)"
+
+    params: list[Any] = [user_id, user_id, user_id, status]
+    if requested_by_current_user is not None:
+        params.append(user_id)
+
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                f"""
+                select u.id, u.username, u.first_name, u.last_name,
+                       f.status, f.created_at, f.updated_at
+                from friendships f
+                join users u on u.id = case
+                  when f.user_low_id = %s then f.user_high_id
+                  else f.user_low_id
+                end
+                where (f.user_low_id = %s or f.user_high_id = %s)
+                  and f.status = %s
+                  {requester_clause}
+                order by f.updated_at desc
+                """,
+                tuple(params),
+            )
+            rows = cursor.fetchall()
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    return [_relationship_from_row(row) for row in rows]
+
+
+def _delete_relationship(
+    *,
+    user_uuid: str,
+    email: str,
+    target_user_id: int,
+    status: str,
+    requester_must_be_current: bool = False,
+    requester_must_be_target: bool = False,
+) -> bool:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    target_user_id = _required_target_user_id(target_user_id)
+    requester_clause = ""
+    params: list[Any] = [user_id, target_user_id, user_id, target_user_id, status]
+    if requester_must_be_current:
+        requester_clause = "and requested_by_user_id = cast(%s as integer)"
+        params.append(user_id)
+    elif requester_must_be_target:
+        requester_clause = "and requested_by_user_id = cast(%s as integer)"
+        params.append(target_user_id)
+
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                f"""
+                delete from friendships
+                where user_low_id = least(cast(%s as integer), cast(%s as integer))
+                  and user_high_id = greatest(cast(%s as integer), cast(%s as integer))
+                  and status = %s
+                  {requester_clause}
+                """,
+                tuple(params),
+            )
+            removed = cursor.rowcount > 0
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+    return removed
+
+
+def _relationship_with_user(
+    *, user_id: int, status: str, created_at: Any, updated_at: Any
+) -> dict[str, Any]:
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                "select id, username, first_name, last_name from users where id = %s",
+                (user_id,),
+            )
+            user_row = cursor.fetchone()
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+    if user_row is None:
+        raise RuntimeError("User was not found.")
+    return {
+        "user": _public_user_from_row(user_row),
+        "status": status,
+        "createdAt": _isoformat(created_at),
+        "updatedAt": _isoformat(updated_at),
+    }
+
+
+def _relationship_from_row(row: Any) -> dict[str, Any]:
+    return {
+        "user": _public_user_from_row(row),
+        "status": row[4],
+        "createdAt": _isoformat(row[5]),
+        "updatedAt": _isoformat(row[6]),
+    }
+
+
+def _public_user_from_row(row: Any) -> dict[str, Any]:
+    return {
+        "id": row[0],
+        "username": row[1],
+        "firstName": row[2],
+        "lastName": row[3],
+    }
+
+
+def _required_target_user_id(user_id: int) -> int:
+    if not isinstance(user_id, int) or user_id <= 0:
+        raise RuntimeError("User ID is required.")
+    return user_id
+
+
+def _isoformat(value: Any) -> str:
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)

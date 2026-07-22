@@ -6,6 +6,15 @@ from typing import Any
 from graphql import GraphQLResolveInfo, build_schema
 
 from ali_api.db import (
+    accept_friend_request,
+    cancel_friend_request,
+    decline_friend_request,
+    get_friends,
+    get_incoming_friend_requests,
+    get_outgoing_friend_requests,
+    remove_friend,
+    search_users_for_friends,
+    send_friend_request,
     add_movie_like,
     get_movie_likes,
     remove_movie_like,
@@ -47,6 +56,22 @@ def resolve_movies_by_genre(
     _source: Any, _info: GraphQLResolveInfo, genreId: int, page: int
 ) -> dict[str, Any]:
     return discover_movies_by_genre(genreId, page)
+
+
+def resolve_user_search(_source: Any, info: GraphQLResolveInfo, query: str) -> list[dict[str, Any]]:
+    return build_user_search_response(_identity_claims(info.context or {}), query)
+
+
+def resolve_friends(_source: Any, info: GraphQLResolveInfo) -> list[dict[str, Any]]:
+    return build_friends_response(_identity_claims(info.context or {}))
+
+
+def resolve_incoming_friend_requests(_source: Any, info: GraphQLResolveInfo) -> list[dict[str, Any]]:
+    return build_incoming_friend_requests_response(_identity_claims(info.context or {}))
+
+
+def resolve_outgoing_friend_requests(_source: Any, info: GraphQLResolveInfo) -> list[dict[str, Any]]:
+    return build_outgoing_friend_requests_response(_identity_claims(info.context or {}))
 
 
 def resolve_profile(_source: Any, info: GraphQLResolveInfo) -> dict[str, Any]:
@@ -131,6 +156,51 @@ def resolve_remove_from_watchlist(
 ) -> bool:
     claims = _identity_claims(info.context or {})
     return build_remove_from_watchlist_response(claims, movieId)
+
+
+def build_user_search_response(claims: dict[str, Any], query: str) -> list[dict[str, Any]]:
+    user_uuid, email = _required_identity(claims)
+    return search_users_for_friends(user_uuid=user_uuid, email=email, query=query)
+
+
+def build_friends_response(claims: dict[str, Any]) -> list[dict[str, Any]]:
+    user_uuid, email = _required_identity(claims)
+    return get_friends(user_uuid=user_uuid, email=email)
+
+
+def build_incoming_friend_requests_response(claims: dict[str, Any]) -> list[dict[str, Any]]:
+    user_uuid, email = _required_identity(claims)
+    return get_incoming_friend_requests(user_uuid=user_uuid, email=email)
+
+
+def build_outgoing_friend_requests_response(claims: dict[str, Any]) -> list[dict[str, Any]]:
+    user_uuid, email = _required_identity(claims)
+    return get_outgoing_friend_requests(user_uuid=user_uuid, email=email)
+
+
+def build_send_friend_request_response(claims: dict[str, Any], user_id: int) -> dict[str, Any]:
+    user_uuid, email = _required_identity(claims)
+    return send_friend_request(user_uuid=user_uuid, email=email, target_user_id=user_id)
+
+
+def build_accept_friend_request_response(claims: dict[str, Any], user_id: int) -> dict[str, Any]:
+    user_uuid, email = _required_identity(claims)
+    return accept_friend_request(user_uuid=user_uuid, email=email, requester_user_id=user_id)
+
+
+def build_decline_friend_request_response(claims: dict[str, Any], user_id: int) -> bool:
+    user_uuid, email = _required_identity(claims)
+    return decline_friend_request(user_uuid=user_uuid, email=email, requester_user_id=user_id)
+
+
+def build_cancel_friend_request_response(claims: dict[str, Any], user_id: int) -> bool:
+    user_uuid, email = _required_identity(claims)
+    return cancel_friend_request(user_uuid=user_uuid, email=email, target_user_id=user_id)
+
+
+def build_remove_friend_response(claims: dict[str, Any], user_id: int) -> bool:
+    user_uuid, email = _required_identity(claims)
+    return remove_friend(user_uuid=user_uuid, email=email, friend_user_id=user_id)
 
 
 def build_user_profile_response(claims: dict[str, Any]) -> dict[str, Any]:
@@ -300,6 +370,10 @@ query_type.fields["health"].resolve = resolve_health
 query_type.fields["users"].resolve = resolve_users
 query_type.fields["movies"].resolve = resolve_movies
 users_type.fields["profile"].resolve = resolve_profile
+users_type.fields["findUsers"].resolve = resolve_user_search
+users_type.fields["friends"].resolve = resolve_friends
+users_type.fields["incomingFriendRequests"].resolve = resolve_incoming_friend_requests
+users_type.fields["outgoingFriendRequests"].resolve = resolve_outgoing_friend_requests
 users_type.fields["watchlist"].resolve = resolve_watchlist
 users_type.fields["watchlistEntries"].resolve = resolve_watchlist_entries
 users_type.fields["likes"].resolve = resolve_likes
@@ -311,4 +385,9 @@ mutation_type.fields["removeLike"].resolve = resolve_remove_like
 mutation_type.fields["addToWatchlist"].resolve = resolve_add_to_watchlist
 mutation_type.fields["markWatched"].resolve = resolve_mark_watched
 mutation_type.fields["removeFromWatchlist"].resolve = resolve_remove_from_watchlist
+mutation_type.fields["sendFriendRequest"].resolve = lambda _source, info, userId: build_send_friend_request_response(_identity_claims(info.context or {}), userId)
+mutation_type.fields["acceptFriendRequest"].resolve = lambda _source, info, userId: build_accept_friend_request_response(_identity_claims(info.context or {}), userId)
+mutation_type.fields["declineFriendRequest"].resolve = lambda _source, info, userId: build_decline_friend_request_response(_identity_claims(info.context or {}), userId)
+mutation_type.fields["cancelFriendRequest"].resolve = lambda _source, info, userId: build_cancel_friend_request_response(_identity_claims(info.context or {}), userId)
+mutation_type.fields["removeFriend"].resolve = lambda _source, info, userId: build_remove_friend_response(_identity_claims(info.context or {}), userId)
 

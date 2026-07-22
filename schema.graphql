@@ -16,6 +16,11 @@ type Mutation {
   addToWatchlist(movieId: Int!): WatchlistItem!
   markWatched(movieId: Int!): WatchlistItem!
   removeFromWatchlist(movieId: Int!): Boolean!
+  sendFriendRequest(userId: Int!): Friendship!
+  acceptFriendRequest(userId: Int!): Friendship!
+  declineFriendRequest(userId: Int!): Boolean!
+  cancelFriendRequest(userId: Int!): Boolean!
+  removeFriend(userId: Int!): Boolean!
 }
 
 input UpdateUserProfileInput {
@@ -34,6 +39,10 @@ type Users {
   watchlist(status: WatchlistStatus): [WatchlistItem!]!
   watchlistEntries: [WatchlistEntry!]!
   likes: [MovieLike!]!
+  findUsers(query: String!): [PublicUserProfile!]!
+  friends: [Friendship!]!
+  incomingFriendRequests: [Friendship!]!
+  outgoingFriendRequests: [Friendship!]!
 }
 
 type Movies {
@@ -91,6 +100,25 @@ type MovieSearchResult {
   vote_count: Int
   video: Boolean
   vote_average: Float
+}
+
+type PublicUserProfile {
+  id: Int!
+  username: String!
+  firstName: String
+  lastName: String
+}
+
+enum FriendshipStatus {
+  pending
+  accepted
+}
+
+type Friendship {
+  user: PublicUserProfile!
+  status: FriendshipStatus!
+  createdAt: String!
+  updatedAt: String!
 }
 
 type UserProfile {

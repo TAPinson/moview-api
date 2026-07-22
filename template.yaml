@@ -80,6 +80,11 @@ Resources:
           addToWatchlist(movieId: Int!): WatchlistItem!
           markWatched(movieId: Int!): WatchlistItem!
           removeFromWatchlist(movieId: Int!): Boolean!
+          sendFriendRequest(userId: Int!): Friendship!
+          acceptFriendRequest(userId: Int!): Friendship!
+          declineFriendRequest(userId: Int!): Boolean!
+          cancelFriendRequest(userId: Int!): Boolean!
+          removeFriend(userId: Int!): Boolean!
         }
 
         input UpdateUserProfileInput {
@@ -98,6 +103,10 @@ Resources:
           watchlist(status: WatchlistStatus): [WatchlistItem!]!
           watchlistEntries: [WatchlistEntry!]!
           likes: [MovieLike!]!
+          findUsers(query: String!): [PublicUserProfile!]!
+          friends: [Friendship!]!
+          incomingFriendRequests: [Friendship!]!
+          outgoingFriendRequests: [Friendship!]!
         }
 
         type Movies {
@@ -155,6 +164,25 @@ Resources:
           vote_count: Int
           video: Boolean
           vote_average: Float
+        }
+
+        type PublicUserProfile {
+          id: Int!
+          username: String!
+          firstName: String
+          lastName: String
+        }
+
+        enum FriendshipStatus {
+          pending
+          accepted
+        }
+
+        type Friendship {
+          user: PublicUserProfile!
+          status: FriendshipStatus!
+          createdAt: String!
+          updatedAt: String!
         }
 
         type UserProfile {
@@ -474,6 +502,114 @@ Resources:
           "operation": "Invoke",
           "payload": $util.toJson($context)
         }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  UsersFindUsersResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: [MoviewGraphQLSchema]
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Users
+      FieldName: findUsers
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        { "version": "2017-02-28", "operation": "Invoke", "payload": $util.toJson($context) }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  UsersFriendsResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: [MoviewGraphQLSchema]
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Users
+      FieldName: friends
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        { "version": "2017-02-28", "operation": "Invoke", "payload": $util.toJson($context) }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  IncomingFriendRequestsResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: [MoviewGraphQLSchema]
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Users
+      FieldName: incomingFriendRequests
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        { "version": "2017-02-28", "operation": "Invoke", "payload": $util.toJson($context) }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  OutgoingFriendRequestsResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: [MoviewGraphQLSchema]
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Users
+      FieldName: outgoingFriendRequests
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        { "version": "2017-02-28", "operation": "Invoke", "payload": $util.toJson($context) }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  SendFriendRequestResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: [MoviewGraphQLSchema]
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: sendFriendRequest
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        { "version": "2017-02-28", "operation": "Invoke", "payload": $util.toJson($context) }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  AcceptFriendRequestResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: [MoviewGraphQLSchema]
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: acceptFriendRequest
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        { "version": "2017-02-28", "operation": "Invoke", "payload": $util.toJson($context) }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  DeclineFriendRequestResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: [MoviewGraphQLSchema]
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: declineFriendRequest
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        { "version": "2017-02-28", "operation": "Invoke", "payload": $util.toJson($context) }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  CancelFriendRequestResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: [MoviewGraphQLSchema]
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: cancelFriendRequest
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        { "version": "2017-02-28", "operation": "Invoke", "payload": $util.toJson($context) }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  RemoveFriendResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: [MoviewGraphQLSchema]
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: removeFriend
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        { "version": "2017-02-28", "operation": "Invoke", "payload": $util.toJson($context) }
       ResponseMappingTemplate: $util.toJson($context.result)
 
 Outputs:

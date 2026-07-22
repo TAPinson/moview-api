@@ -495,3 +495,62 @@ def test_appsync_remove_from_watchlist_resolver(monkeypatch) -> None:
     }
 
     assert lambda_handler(event, context=None) is True
+
+
+def test_appsync_find_users_resolver(monkeypatch) -> None:
+    users = [{"id": 2, "username": "friend", "firstName": "Friendly", "lastName": "User"}]
+
+    def fake_build_user_search_response(claims, query):
+        assert claims == {
+            "sub": "123e4567-e89b-12d3-a456-426614174000",
+            "email": "ali@example.com",
+        }
+        assert query == "friend"
+        return users
+
+    monkeypatch.setattr(
+        "ali_api.handler.build_user_search_response", fake_build_user_search_response
+    )
+    event = {
+        "arguments": {"query": "friend"},
+        "info": {"fieldName": "findUsers", "parentTypeName": "Users"},
+        "identity": {
+            "claims": {
+                "sub": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "ali@example.com",
+            }
+        },
+    }
+
+    assert lambda_handler(event, context=None) == users
+
+
+def test_appsync_accept_friend_request_resolver(monkeypatch) -> None:
+    friendship = {
+        "user": {"id": 2, "username": "friend", "firstName": None, "lastName": None},
+        "status": "accepted",
+        "createdAt": "2026-07-21T10:00:00+00:00",
+        "updatedAt": "2026-07-21T11:00:00+00:00",
+    }
+
+    def fake_build_accept_friend_request_response(claims, user_id):
+        assert claims["email"] == "ali@example.com"
+        assert user_id == 2
+        return friendship
+
+    monkeypatch.setattr(
+        "ali_api.handler.build_accept_friend_request_response",
+        fake_build_accept_friend_request_response,
+    )
+    event = {
+        "arguments": {"userId": 2},
+        "info": {"fieldName": "acceptFriendRequest", "parentTypeName": "Mutation"},
+        "identity": {
+            "claims": {
+                "sub": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "ali@example.com",
+            }
+        },
+    }
+
+    assert lambda_handler(event, context=None) == friendship
