@@ -12,6 +12,7 @@ from ali_api.db import (
     get_friends,
     get_incoming_friend_requests,
     get_outgoing_friend_requests,
+    get_shared_watchlist,
     remove_friend,
     search_users_for_friends,
     send_friend_request,
@@ -86,6 +87,17 @@ def resolve_watchlist(
 ) -> list[dict[str, Any]]:
     claims = _identity_claims(info.context or {})
     return build_watchlist_response(claims, status)
+
+
+def resolve_shared_watchlist(
+    _source: Any,
+    info: GraphQLResolveInfo,
+    friendUserId: int,
+) -> list[dict[str, Any]]:
+    return build_shared_watchlist_response(
+        _identity_claims(info.context or {}),
+        friendUserId,
+    )
 
 
 def resolve_watchlist_entries(
@@ -248,6 +260,19 @@ def build_watchlist_response(
     return [_with_movie_details(item) for item in items]
 
 
+def build_shared_watchlist_response(
+    claims: dict[str, Any],
+    friend_user_id: int,
+) -> list[dict[str, Any]]:
+    user_uuid, email = _required_identity(claims)
+    items = get_shared_watchlist(
+        user_uuid=user_uuid,
+        email=email,
+        friend_user_id=friend_user_id,
+    )
+    return [_with_movie_details(item) for item in items]
+
+
 def build_watchlist_entries_response(claims: dict[str, Any]) -> list[dict[str, Any]]:
     user_uuid, email = _required_identity(claims)
     return get_watchlist_entries(user_uuid=user_uuid, email=email)
@@ -375,6 +400,7 @@ users_type.fields["friends"].resolve = resolve_friends
 users_type.fields["incomingFriendRequests"].resolve = resolve_incoming_friend_requests
 users_type.fields["outgoingFriendRequests"].resolve = resolve_outgoing_friend_requests
 users_type.fields["watchlist"].resolve = resolve_watchlist
+users_type.fields["sharedWatchlist"].resolve = resolve_shared_watchlist
 users_type.fields["watchlistEntries"].resolve = resolve_watchlist_entries
 users_type.fields["likes"].resolve = resolve_likes
 movies_type.fields["search"].resolve = resolve_movie_search

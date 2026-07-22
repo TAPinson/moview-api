@@ -20,6 +20,7 @@ from ali_api.schema import (
     build_outgoing_friend_requests_response,
     build_remove_friend_response,
     build_send_friend_request_response,
+    build_shared_watchlist_response,
     build_user_search_response,
     build_add_to_watchlist_response,
     build_likes_response,
@@ -134,6 +135,12 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
 
     if field_name == "watchlist":
         return build_watchlist_response(_appsync_claims(event), arguments.get("status"))
+
+    if field_name == "sharedWatchlist":
+        return build_shared_watchlist_response(
+            _appsync_claims(event),
+            arguments.get("friendUserId"),
+        )
 
     if field_name == "watchlistEntries":
         return build_watchlist_entries_response(_appsync_claims(event))

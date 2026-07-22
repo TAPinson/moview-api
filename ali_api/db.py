@@ -719,6 +719,68 @@ def remove_friend(*, user_uuid: str, email: str, friend_user_id: int) -> bool:
     )
 
 
+def get_shared_watchlist(
+    *,
+    user_uuid: str,
+    email: str,
+    friend_user_id: int,
+) -> list[dict[str, Any]]:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    friend_user_id = _required_target_user_id(friend_user_id)
+    user_low_id, user_high_id = _canonical_user_pair(user_id, friend_user_id)
+
+    if user_id == friend_user_id:
+        raise RuntimeError("Select one of your friends.")
+
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                """
+                select 1
+                from friendships
+                where user_low_id = cast(%s as integer)
+                  and user_high_id = cast(%s as integer)
+                  and status = 'accepted'
+                """,
+                (user_low_id, user_high_id),
+            )
+            if cursor.fetchone() is None:
+                raise RuntimeError("The selected user is not an accepted friend.")
+
+            cursor.execute(
+                """
+                select mine.user_id,
+                       mine.movie_id,
+                       mine.status,
+                       mine.added_at,
+                       mine.watched_at,
+                       mine.notes
+                from movie_watchlist mine
+                join movie_watchlist theirs
+                  on theirs.movie_id = mine.movie_id
+                 and theirs.user_id = cast(%s as integer)
+                where mine.user_id = cast(%s as integer)
+                  and mine.status = 'want_to_watch'
+                  and theirs.status = 'want_to_watch'
+                order by mine.added_at desc
+                """,
+                (friend_user_id, user_id),
+            )
+            rows = cursor.fetchall()
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    return [_watchlist_item_from_row(row) for row in rows]
+
+
+def _canonical_user_pair(user_id: int, other_user_id: int) -> tuple[int, int]:
+    return min(user_id, other_user_id), max(user_id, other_user_id)
+
+
 def _get_relationships(
     *,
     user_id: int,

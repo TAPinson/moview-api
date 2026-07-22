@@ -37,6 +37,7 @@ type Health {
 type Users {
   profile: UserProfile!
   watchlist(status: WatchlistStatus): [WatchlistItem!]!
+  sharedWatchlist(friendUserId: Int!): [WatchlistItem!]!
   watchlistEntries: [WatchlistEntry!]!
   likes: [MovieLike!]!
   findUsers(query: String!): [PublicUserProfile!]!

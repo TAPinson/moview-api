@@ -554,3 +554,45 @@ def test_appsync_accept_friend_request_resolver(monkeypatch) -> None:
     }
 
     assert lambda_handler(event, context=None) == friendship
+
+
+def test_appsync_shared_watchlist_resolver(monkeypatch) -> None:
+    items = [
+        {
+            "userId": 1,
+            "movieId": 550,
+            "status": "want_to_watch",
+            "addedAt": "2026-07-22T10:00:00+00:00",
+            "watchedAt": None,
+            "notes": None,
+            "movie": {"id": 550, "title": "Fight Club"},
+        }
+    ]
+
+    def fake_build_shared_watchlist_response(claims, friend_user_id):
+        assert claims == {
+            "sub": "123e4567-e89b-12d3-a456-426614174000",
+            "email": "ali@example.com",
+        }
+        assert friend_user_id == 2
+        return items
+
+    monkeypatch.setattr(
+        "ali_api.handler.build_shared_watchlist_response",
+        fake_build_shared_watchlist_response,
+    )
+    event = {
+        "arguments": {"friendUserId": 2},
+        "info": {
+            "fieldName": "sharedWatchlist",
+            "parentTypeName": "Users",
+        },
+        "identity": {
+            "claims": {
+                "sub": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "ali@example.com",
+            }
+        },
+    }
+
+    assert lambda_handler(event, context=None) == items

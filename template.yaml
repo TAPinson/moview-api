@@ -288,6 +288,23 @@ Resources:
         }
       ResponseMappingTemplate: $util.toJson($context.result)
 
+  UsersSharedWatchlistResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn:
+      - MoviewGraphQLSchema
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Users
+      FieldName: sharedWatchlist
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
   UsersWatchlistResolver:
     Type: AWS::AppSync::Resolver
     DependsOn:
