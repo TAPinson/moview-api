@@ -13,4 +13,4 @@ patch, stop, show the revised patch, and request approval again.
 
 Formatting generated files and running non-mutating checks or tests after an approved edit do not require additional approval.
 
-Attempt to use Functional Core, Imperative Shell software design patter.
+Attempt to use Functional Core, Imperative Shell software design pattern.
