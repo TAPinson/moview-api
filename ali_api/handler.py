@@ -14,6 +14,7 @@ from ali_api.schema import (
     build_accept_friend_request_response,
     build_add_like_response,
     build_cancel_friend_request_response,
+    build_create_profile_photo_upload_response,
     build_decline_friend_request_response,
     build_friends_response,
     build_incoming_friend_requests_response,
@@ -151,6 +152,11 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
     if field_name == "updateUser":
         return build_update_user_response(
             _appsync_claims(event), arguments.get("input") or {}
+        )
+
+    if field_name == "createProfilePhotoUpload":
+        return build_create_profile_photo_upload_response(
+            _appsync_claims(event), arguments.get("contentType")
         )
 
     if field_name == "addLike":

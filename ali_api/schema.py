@@ -27,6 +27,7 @@ from ali_api.db import (
     remove_from_watchlist,
     update_user_profile,
 )
+from ali_api.profile_photos import create_profile_photo_upload, profile_photo_url
 from ali_api.tmdb import discover_movies_by_genre, get_movie_details, search_movies
 
 
@@ -125,6 +126,14 @@ def resolve_update_user(
     return build_update_user_response(claims, input)
 
 
+def resolve_create_profile_photo_upload(
+    _source: Any, info: GraphQLResolveInfo, contentType: str
+) -> dict[str, Any]:
+    return build_create_profile_photo_upload_response(
+        _identity_claims(info.context or {}), contentType
+    )
+
+
 def resolve_add_like(
     _source: Any,
     info: GraphQLResolveInfo,
@@ -172,32 +181,42 @@ def resolve_remove_from_watchlist(
 
 def build_user_search_response(claims: dict[str, Any], query: str) -> list[dict[str, Any]]:
     user_uuid, email = _required_identity(claims)
-    return search_users_for_friends(user_uuid=user_uuid, email=email, query=query)
+    users = search_users_for_friends(user_uuid=user_uuid, email=email, query=query)
+    return [_with_profile_photo(user) for user in users]
 
 
 def build_friends_response(claims: dict[str, Any]) -> list[dict[str, Any]]:
     user_uuid, email = _required_identity(claims)
-    return get_friends(user_uuid=user_uuid, email=email)
+    relationships = get_friends(user_uuid=user_uuid, email=email)
+    return [_with_friend_profile_photo(item) for item in relationships]
 
 
 def build_incoming_friend_requests_response(claims: dict[str, Any]) -> list[dict[str, Any]]:
     user_uuid, email = _required_identity(claims)
-    return get_incoming_friend_requests(user_uuid=user_uuid, email=email)
+    relationships = get_incoming_friend_requests(user_uuid=user_uuid, email=email)
+    return [_with_friend_profile_photo(item) for item in relationships]
 
 
 def build_outgoing_friend_requests_response(claims: dict[str, Any]) -> list[dict[str, Any]]:
     user_uuid, email = _required_identity(claims)
-    return get_outgoing_friend_requests(user_uuid=user_uuid, email=email)
+    relationships = get_outgoing_friend_requests(user_uuid=user_uuid, email=email)
+    return [_with_friend_profile_photo(item) for item in relationships]
 
 
 def build_send_friend_request_response(claims: dict[str, Any], user_id: int) -> dict[str, Any]:
     user_uuid, email = _required_identity(claims)
-    return send_friend_request(user_uuid=user_uuid, email=email, target_user_id=user_id)
+    relationship = send_friend_request(
+        user_uuid=user_uuid, email=email, target_user_id=user_id
+    )
+    return _with_friend_profile_photo(relationship)
 
 
 def build_accept_friend_request_response(claims: dict[str, Any], user_id: int) -> dict[str, Any]:
     user_uuid, email = _required_identity(claims)
-    return accept_friend_request(user_uuid=user_uuid, email=email, requester_user_id=user_id)
+    relationship = accept_friend_request(
+        user_uuid=user_uuid, email=email, requester_user_id=user_id
+    )
+    return _with_friend_profile_photo(relationship)
 
 
 def build_decline_friend_request_response(claims: dict[str, Any], user_id: int) -> bool:
@@ -221,12 +240,32 @@ def build_user_profile_response(claims: dict[str, Any]) -> dict[str, Any]:
     if not user_uuid or not email:
         raise RuntimeError("Authenticated user identity is missing sub or email.")
 
-    return get_or_create_user_profile(
+    profile = get_or_create_user_profile(
         user_uuid=str(user_uuid),
         email=str(email),
         first_name=_optional_claim(claims, "given_name"),
         last_name=_optional_claim(claims, "family_name"),
     )
+    return _with_profile_photo(profile)
+
+
+def build_create_profile_photo_upload_response(
+    claims: dict[str, Any], content_type: str
+) -> dict[str, Any]:
+    user_uuid, email = _required_identity(claims)
+    if not isinstance(content_type, str):
+        raise RuntimeError("Profile photo content type is required.")
+    profile = get_or_create_user_profile(user_uuid=user_uuid, email=email)
+    return create_profile_photo_upload(profile["id"], content_type)
+
+
+def _with_profile_photo(profile: dict[str, Any]) -> dict[str, Any]:
+    url = profile_photo_url(profile["id"])
+    return profile if url is None else {**profile, "profilePhotoUrl": url}
+
+
+def _with_friend_profile_photo(relationship: dict[str, Any]) -> dict[str, Any]:
+    return {**relationship, "user": _with_profile_photo(relationship["user"])}
 
 
 def build_add_like_response(claims: dict[str, Any], movie_id: int) -> dict[str, Any]:
@@ -341,13 +380,14 @@ def build_update_user_response(
     if not isinstance(username, str) or not username.strip():
         raise RuntimeError("Username is required.")
 
-    return update_user_profile(
+    profile = update_user_profile(
         user_uuid=str(user_uuid),
         email=str(email),
         username=username.strip(),
         first_name=_optional_input(input, "firstName"),
         last_name=_optional_input(input, "lastName"),
     )
+    return _with_profile_photo(profile)
 
 
 def _optional_input(input: dict[str, Any], key: str) -> str | None:
@@ -406,6 +446,9 @@ users_type.fields["likes"].resolve = resolve_likes
 movies_type.fields["search"].resolve = resolve_movie_search
 movies_type.fields["byGenre"].resolve = resolve_movies_by_genre
 mutation_type.fields["updateUser"].resolve = resolve_update_user
+mutation_type.fields["createProfilePhotoUpload"].resolve = (
+    resolve_create_profile_photo_upload
+)
 mutation_type.fields["addLike"].resolve = resolve_add_like
 mutation_type.fields["removeLike"].resolve = resolve_remove_like
 mutation_type.fields["addToWatchlist"].resolve = resolve_add_to_watchlist

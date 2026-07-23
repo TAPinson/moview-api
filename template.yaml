@@ -17,6 +17,34 @@ Globals:
       - x86_64
 
 Resources:
+  MoviewProfilePhotoBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ["*"]
+            AllowedMethods: [GET, POST]
+            AllowedOrigins: ["*"]
+            ExposedHeaders: [ETag]
+            MaxAge: 300
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+
   MoviewUserPool:
     Type: AWS::Cognito::UserPool
     DependsOn:
@@ -72,6 +100,7 @@ Resources:
         Variables:
           DATABASE_URL_SECRET_ARN: !Ref DatabaseUrlSecretArn
           TMDB_API_KEY_SECRET_ID: dev/tmdb-api-key
+          PROFILE_PHOTO_BUCKET: !Ref MoviewProfilePhotoBucket
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:
@@ -81,6 +110,12 @@ Resources:
               Resource:
                 - !Ref DatabaseUrlSecretArn
                 - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:dev/tmdb-api-key-*
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+              Resource: !Sub ${MoviewProfilePhotoBucket.Arn}/user/*
   MoviewUserPoolInvokeFunctionPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -228,6 +263,22 @@ Resources:
       ApiId: !GetAtt MoviewGraphQLApi.ApiId
       TypeName: Mutation
       FieldName: updateUser
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  CreateProfilePhotoUploadResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: [MoviewGraphQLSchema]
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: createProfilePhotoUpload
       DataSourceName: !GetAtt MoviewLambdaDataSource.Name
       RequestMappingTemplate: |
         {
@@ -499,6 +550,9 @@ Resources:
       ResponseMappingTemplate: $util.toJson($context.result)
 
 Outputs:
+  MoviewProfilePhotoBucketName:
+    Description: Private S3 bucket containing user profile photos.
+    Value: !Ref MoviewProfilePhotoBucket
   MoviewUserPoolId:
     Description: Cognito User Pool ID for moview-ui authentication.
     Value: !Ref MoviewUserPool

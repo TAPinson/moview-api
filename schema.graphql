@@ -11,6 +11,7 @@ type Query {
 
 type Mutation {
   updateUser(input: UpdateUserProfileInput!): UserProfile!
+  createProfilePhotoUpload(contentType: String!): ProfilePhotoUpload!
   addLike(movieId: Int!): MovieLike!
   removeLike(movieId: Int!): Boolean!
   addToWatchlist(movieId: Int!): WatchlistItem!
@@ -27,6 +28,16 @@ input UpdateUserProfileInput {
   username: String!
   firstName: String
   lastName: String
+}
+
+type ProfilePhotoUpload {
+  url: String!
+  fields: [ProfilePhotoUploadField!]!
+}
+
+type ProfilePhotoUploadField {
+  name: String!
+  value: String!
 }
 
 type Health {
@@ -108,6 +119,7 @@ type PublicUserProfile {
   username: String!
   firstName: String
   lastName: String
+  profilePhotoUrl: String
 }
 
 enum FriendshipStatus {
@@ -129,4 +141,5 @@ type UserProfile {
   admin: Boolean!
   firstName: String
   lastName: String
+  profilePhotoUrl: String
 }

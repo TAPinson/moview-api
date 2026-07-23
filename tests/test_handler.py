@@ -148,6 +148,37 @@ def test_appsync_update_user_resolver(monkeypatch) -> None:
     assert lambda_handler(event, context=None) == profile
 
 
+def test_appsync_create_profile_photo_upload_resolver(monkeypatch) -> None:
+    upload = {
+        "url": "https://example.test/upload",
+        "fields": [{"name": "key", "value": "user/1/profile"}],
+    }
+
+    def fake_build_upload(claims, content_type):
+        assert claims["email"] == "ali@example.com"
+        assert content_type == "image/jpeg"
+        return upload
+
+    monkeypatch.setattr(
+        "ali_api.handler.build_create_profile_photo_upload_response", fake_build_upload
+    )
+    event = {
+        "arguments": {"contentType": "image/jpeg"},
+        "info": {
+            "fieldName": "createProfilePhotoUpload",
+            "parentTypeName": "Mutation",
+        },
+        "identity": {
+            "claims": {
+                "sub": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "ali@example.com",
+            }
+        },
+    }
+
+    assert lambda_handler(event, context=None) == upload
+
+
 def test_appsync_movies_resolver() -> None:
     event = {
         "arguments": {},
