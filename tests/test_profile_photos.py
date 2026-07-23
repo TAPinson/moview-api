@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ali_api import profile_photos
+from moview_api import profile_photos
 
 
 class FakeS3Client:

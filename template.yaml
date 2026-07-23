@@ -95,7 +95,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: .
-      Handler: ali_api.handler.lambda_handler
+      Handler: moview_api.handler.lambda_handler
       Environment:
         Variables:
           DATABASE_URL_SECRET_ARN: !Ref DatabaseUrlSecretArn

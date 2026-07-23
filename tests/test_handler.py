@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from ali_api.handler import lambda_handler
+from moview_api.handler import lambda_handler
 
 
 
@@ -36,7 +36,7 @@ def test_cognito_post_confirmation_creates_user_profile(monkeypatch) -> None:
     def fake_create_user_profile(**kwargs) -> None:
         created.update(kwargs)
 
-    monkeypatch.setattr("ali_api.handler.create_user_profile", fake_create_user_profile)
+    monkeypatch.setattr("moview_api.handler.create_user_profile", fake_create_user_profile)
     event = {
         "triggerSource": "PostConfirmation_ConfirmSignUp",
         "request": {
@@ -89,7 +89,7 @@ def test_appsync_users_profile_resolver(monkeypatch) -> None:
         return profile
 
     monkeypatch.setattr(
-        "ali_api.schema.get_or_create_user_profile", fake_get_or_create_user_profile
+        "moview_api.schema.get_or_create_user_profile", fake_get_or_create_user_profile
     )
     event = {
         "arguments": {},
@@ -127,7 +127,7 @@ def test_appsync_update_user_resolver(monkeypatch) -> None:
         }
         return profile
 
-    monkeypatch.setattr("ali_api.schema.update_user_profile", fake_update_user_profile)
+    monkeypatch.setattr("moview_api.schema.update_user_profile", fake_update_user_profile)
     event = {
         "arguments": {
             "input": {
@@ -160,7 +160,7 @@ def test_appsync_create_profile_photo_upload_resolver(monkeypatch) -> None:
         return upload
 
     monkeypatch.setattr(
-        "ali_api.handler.build_create_profile_photo_upload_response", fake_build_upload
+        "moview_api.handler.build_create_profile_photo_upload_response", fake_build_upload
     )
     event = {
         "arguments": {"contentType": "image/jpeg"},
@@ -212,7 +212,7 @@ def test_appsync_movie_search_resolver(monkeypatch) -> None:
         assert query == "Jack Reacher"
         return results
 
-    monkeypatch.setattr("ali_api.handler.search_movies", fake_search_movies)
+    monkeypatch.setattr("moview_api.handler.search_movies", fake_search_movies)
     event = {
         "arguments": {"query": "Jack Reacher"},
         "info": {"fieldName": "search", "parentTypeName": "Movies"},
@@ -234,7 +234,7 @@ def test_appsync_movies_by_genre_resolver(monkeypatch) -> None:
         return results
 
     monkeypatch.setattr(
-        "ali_api.handler.discover_movies_by_genre", fake_discover_movies_by_genre
+        "moview_api.handler.discover_movies_by_genre", fake_discover_movies_by_genre
     )
     event = {
         "arguments": {"genreId": 18, "page": 2},
@@ -259,7 +259,7 @@ def test_appsync_add_like_resolver(monkeypatch) -> None:
         }
         return like
 
-    monkeypatch.setattr("ali_api.schema.add_movie_like", fake_add_movie_like)
+    monkeypatch.setattr("moview_api.schema.add_movie_like", fake_add_movie_like)
     event = {
         "arguments": {"movieId": 343611},
         "info": {"fieldName": "addLike", "parentTypeName": "Mutation"},
@@ -283,7 +283,7 @@ def test_appsync_remove_like_resolver(monkeypatch) -> None:
         }
         return True
 
-    monkeypatch.setattr("ali_api.schema.remove_movie_like", fake_remove_movie_like)
+    monkeypatch.setattr("moview_api.schema.remove_movie_like", fake_remove_movie_like)
     event = {
         "arguments": {"movieId": 343611},
         "info": {"fieldName": "removeLike", "parentTypeName": "Mutation"},
@@ -334,8 +334,8 @@ def test_appsync_likes_resolver(monkeypatch) -> None:
         assert movie_id == 343611
         return movie
 
-    monkeypatch.setattr("ali_api.schema.get_movie_likes", fake_get_movie_likes)
-    monkeypatch.setattr("ali_api.schema.get_movie_details", fake_get_movie_details)
+    monkeypatch.setattr("moview_api.schema.get_movie_likes", fake_get_movie_likes)
+    monkeypatch.setattr("moview_api.schema.get_movie_details", fake_get_movie_details)
     event = {
         "arguments": {},
         "info": {"fieldName": "likes", "parentTypeName": "Users"},
@@ -390,8 +390,8 @@ def test_appsync_watchlist_resolver(monkeypatch) -> None:
         assert movie_id == 343611
         return movie
 
-    monkeypatch.setattr("ali_api.schema.get_watchlist", fake_get_watchlist)
-    monkeypatch.setattr("ali_api.schema.get_movie_details", fake_get_movie_details)
+    monkeypatch.setattr("moview_api.schema.get_watchlist", fake_get_watchlist)
+    monkeypatch.setattr("moview_api.schema.get_movie_details", fake_get_movie_details)
     event = {
         "arguments": {"status": "want_to_watch"},
         "info": {"fieldName": "watchlist", "parentTypeName": "Users"},
@@ -420,7 +420,7 @@ def test_appsync_watchlist_entries_resolver(monkeypatch) -> None:
         return entries
 
     monkeypatch.setattr(
-        "ali_api.schema.get_watchlist_entries", fake_get_watchlist_entries
+        "moview_api.schema.get_watchlist_entries", fake_get_watchlist_entries
     )
     event = {
         "arguments": {},
@@ -454,7 +454,7 @@ def test_appsync_add_to_watchlist_resolver(monkeypatch) -> None:
         }
         return item
 
-    monkeypatch.setattr("ali_api.schema.add_to_watchlist", fake_add_to_watchlist)
+    monkeypatch.setattr("moview_api.schema.add_to_watchlist", fake_add_to_watchlist)
     event = {
         "arguments": {"movieId": 343611},
         "info": {"fieldName": "addToWatchlist", "parentTypeName": "Mutation"},
@@ -487,7 +487,7 @@ def test_appsync_mark_watched_resolver(monkeypatch) -> None:
         }
         return item
 
-    monkeypatch.setattr("ali_api.schema.mark_movie_watched", fake_mark_movie_watched)
+    monkeypatch.setattr("moview_api.schema.mark_movie_watched", fake_mark_movie_watched)
     event = {
         "arguments": {"movieId": 343611},
         "info": {"fieldName": "markWatched", "parentTypeName": "Mutation"},
@@ -512,7 +512,7 @@ def test_appsync_remove_from_watchlist_resolver(monkeypatch) -> None:
         return True
 
     monkeypatch.setattr(
-        "ali_api.schema.remove_from_watchlist", fake_remove_from_watchlist
+        "moview_api.schema.remove_from_watchlist", fake_remove_from_watchlist
     )
     event = {
         "arguments": {"movieId": 343611},
@@ -540,7 +540,7 @@ def test_appsync_find_users_resolver(monkeypatch) -> None:
         return users
 
     monkeypatch.setattr(
-        "ali_api.handler.build_user_search_response", fake_build_user_search_response
+        "moview_api.handler.build_user_search_response", fake_build_user_search_response
     )
     event = {
         "arguments": {"query": "friend"},
@@ -570,7 +570,7 @@ def test_appsync_accept_friend_request_resolver(monkeypatch) -> None:
         return friendship
 
     monkeypatch.setattr(
-        "ali_api.handler.build_accept_friend_request_response",
+        "moview_api.handler.build_accept_friend_request_response",
         fake_build_accept_friend_request_response,
     )
     event = {
@@ -609,7 +609,7 @@ def test_appsync_shared_watchlist_resolver(monkeypatch) -> None:
         return items
 
     monkeypatch.setattr(
-        "ali_api.handler.build_shared_watchlist_response",
+        "moview_api.handler.build_shared_watchlist_response",
         fake_build_shared_watchlist_response,
     )
     event = {

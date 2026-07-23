@@ -5,7 +5,7 @@ from typing import Any
 
 from graphql import GraphQLResolveInfo, build_schema
 
-from ali_api.db import (
+from moview_api.db import (
     accept_friend_request,
     cancel_friend_request,
     decline_friend_request,
@@ -27,8 +27,8 @@ from ali_api.db import (
     remove_from_watchlist,
     update_user_profile,
 )
-from ali_api.profile_photos import create_profile_photo_upload, profile_photo_url
-from ali_api.tmdb import discover_movies_by_genre, get_movie_details, search_movies
+from moview_api.profile_photos import create_profile_photo_upload, profile_photo_url
+from moview_api.tmdb import discover_movies_by_genre, get_movie_details, search_movies
 
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.graphql"

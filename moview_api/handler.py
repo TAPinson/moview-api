@@ -8,9 +8,9 @@ from typing import Any
 
 from graphql import graphql_sync
 
-from ali_api.db import create_user_profile
-from ali_api.tmdb import discover_movies_by_genre, search_movies
-from ali_api.schema import (
+from moview_api.db import create_user_profile
+from moview_api.tmdb import discover_movies_by_genre, search_movies
+from moview_api.schema import (
     build_accept_friend_request_response,
     build_add_like_response,
     build_cancel_friend_request_response,
@@ -286,7 +286,7 @@ def _format_graphql_error(error: Any) -> JsonObject:
 
 def main() -> None:
     if len(sys.argv) != 2:
-        raise SystemExit("Usage: python -m ali_api.handler <event.json>")
+        raise SystemExit("Usage: python -m moview_api.handler <event.json>")
 
     event = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     response = lambda_handler(event, context=None)

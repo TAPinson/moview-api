@@ -23,8 +23,8 @@ pytest
 ## Try the handler locally
 
 ```bash
-python3 -m ali_api.handler events/http-graphql.json
-python3 -m ali_api.handler events/appsync-health.json
+python3 -m moview_api.handler events/http-graphql.json
+python3 -m moview_api.handler events/appsync-health.json
 ```
 
 ## Deploy with SAM
