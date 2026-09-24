@@ -777,6 +777,347 @@ def get_shared_watchlist(
     return [_watchlist_item_from_row(row) for row in rows]
 
 
+
+def create_movie_invitation(
+    *,
+    user_uuid: str,
+    email: str,
+    friend_user_id: int,
+    movie_id: int,
+    uid: str,
+    starts_at: Any,
+    ends_at: Any,
+    timezone: str,
+    event_summary: str,
+    location: str | None,
+    message: str | None,
+    idempotency_key: str,
+) -> dict[str, Any]:
+    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
+    friend_user_id = _required_target_user_id(friend_user_id)
+    user_low_id, user_high_id = _canonical_user_pair(
+        user_id,
+        friend_user_id,
+    )
+
+    if user_id == friend_user_id:
+        raise RuntimeError("Select one of your friends.")
+
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                """
+                select 1
+                from friendships
+                where user_low_id = cast(%s as integer)
+                  and user_high_id = cast(%s as integer)
+                  and status = 'accepted'
+                """,
+                (user_low_id, user_high_id),
+            )
+            if cursor.fetchone() is None:
+                raise RuntimeError(
+                    "The selected user is not an accepted friend."
+                )
+
+            cursor.execute(
+                """
+                select 1
+                from movie_watchlist mine
+                join movie_watchlist theirs
+                  on theirs.movie_id = mine.movie_id
+                 and theirs.user_id = cast(%s as integer)
+                where mine.user_id = cast(%s as integer)
+                  and mine.movie_id = cast(%s as integer)
+                  and mine.status = 'want_to_watch'
+                  and theirs.status = 'want_to_watch'
+                """,
+                (friend_user_id, user_id, movie_id),
+            )
+            if cursor.fetchone() is None:
+                raise RuntimeError(
+                    "The selected movie is not on both watchlists."
+                )
+
+            cursor.execute(
+                """
+                insert into movie_invitations (
+                  uid,
+                  created_by_user_id,
+                  friend_user_id,
+                  movie_id,
+                  starts_at,
+                  ends_at,
+                  timezone,
+                  event_summary,
+                  location,
+                  message,
+                  idempotency_key
+                )
+                values (
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s,
+                  %s
+                )
+                on conflict (
+                  created_by_user_id,
+                  idempotency_key
+                )
+                do update set
+                  idempotency_key = excluded.idempotency_key
+                returning
+                  id,
+                  uid,
+                  created_by_user_id,
+                  friend_user_id,
+                  movie_id,
+                  starts_at,
+                  ends_at,
+                  timezone,
+                  event_summary,
+                  location,
+                  message,
+                  calendar_sequence,
+                  status,
+                  idempotency_key,
+                  provider_message_id,
+                  created_at,
+                  updated_at,
+                  sent_at,
+                  cancelled_at
+                """,
+                (
+                    uid,
+                    user_id,
+                    friend_user_id,
+                    movie_id,
+                    starts_at,
+                    ends_at,
+                    timezone,
+                    event_summary,
+                    location,
+                    message,
+                    idempotency_key,
+                ),
+            )
+            invitation_row = cursor.fetchone()
+            if invitation_row is None:
+                raise RuntimeError("Movie invitation was not created.")
+
+            invitation = _movie_invitation_from_row(invitation_row)
+            if not _invitation_matches_request(
+                invitation,
+                friend_user_id=friend_user_id,
+                movie_id=movie_id,
+                starts_at=starts_at,
+                ends_at=ends_at,
+                timezone=timezone,
+                location=location,
+                message=message,
+            ):
+                raise RuntimeError(
+                    "The idempotency key was already used for "
+                    "a different invitation."
+                )
+
+            cursor.execute(
+                """
+                select id, username, email, first_name, last_name
+                from users
+                where id in (%s, %s)
+                order by id
+                """,
+                (user_id, friend_user_id),
+            )
+            participant_rows = cursor.fetchall()
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    participants = {
+        row[0]: _invitation_participant_from_row(row)
+        for row in participant_rows
+    }
+    sender = participants.get(user_id)
+    friend = participants.get(friend_user_id)
+    if sender is None or friend is None:
+        raise RuntimeError("Invitation participants were not found.")
+
+    return {
+        **invitation,
+        "sender": sender,
+        "friend": friend,
+    }
+
+
+def mark_movie_invitation_sent(
+    *,
+    invitation_id: int,
+    provider_message_id: str,
+) -> dict[str, Any]:
+    return _update_movie_invitation_delivery(
+        invitation_id=invitation_id,
+        status="sent",
+        provider_message_id=provider_message_id,
+        error_message=None,
+    )
+
+
+def mark_movie_invitation_failed(
+    *,
+    invitation_id: int,
+    error_message: str,
+) -> dict[str, Any]:
+    return _update_movie_invitation_delivery(
+        invitation_id=invitation_id,
+        status="failed",
+        provider_message_id=None,
+        error_message=error_message[:2000],
+    )
+
+
+def _update_movie_invitation_delivery(
+    *,
+    invitation_id: int,
+    status: str,
+    provider_message_id: str | None,
+    error_message: str | None,
+) -> dict[str, Any]:
+    connection = _connect(_database_url())
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                """
+                update movie_invitations
+                set status = %s,
+                    provider_message_id = %s,
+                    error_message = %s,
+                    sent_at = case
+                      when %s = 'sent' then now()
+                      else sent_at
+                    end,
+                    updated_at = now()
+                where id = %s
+                  and status <> 'cancelled'
+                returning
+                  id,
+                  uid,
+                  created_by_user_id,
+                  friend_user_id,
+                  movie_id,
+                  starts_at,
+                  ends_at,
+                  timezone,
+                  event_summary,
+                  location,
+                  message,
+                  calendar_sequence,
+                  status,
+                  idempotency_key,
+                  provider_message_id,
+                  created_at,
+                  updated_at,
+                  sent_at,
+                  cancelled_at
+                """,
+                (
+                    status,
+                    provider_message_id,
+                    error_message,
+                    status,
+                    invitation_id,
+                ),
+            )
+            row = cursor.fetchone()
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            cursor.close()
+    finally:
+        connection.close()
+
+    if row is None:
+        raise RuntimeError("Movie invitation was not found.")
+    return _movie_invitation_from_row(row)
+
+
+def _movie_invitation_from_row(row: Any) -> dict[str, Any]:
+    return {
+        "id": row[0],
+        "uid": row[1],
+        "createdByUserId": row[2],
+        "friendUserId": row[3],
+        "movieId": row[4],
+        "startsAt": _isoformat(row[5]),
+        "endsAt": _isoformat(row[6]),
+        "timezone": row[7],
+        "eventSummary": row[8],
+        "location": row[9],
+        "message": row[10],
+        "calendarSequence": row[11],
+        "status": row[12],
+        "idempotencyKey": row[13],
+        "providerMessageId": row[14],
+        "createdAt": _isoformat(row[15]),
+        "updatedAt": _isoformat(row[16]),
+        "sentAt": _optional_isoformat(row[17]),
+        "cancelledAt": _optional_isoformat(row[18]),
+    }
+
+
+def _invitation_participant_from_row(row: Any) -> dict[str, Any]:
+    return {
+        "id": row[0],
+        "username": row[1],
+        "email": row[2],
+        "firstName": row[3],
+        "lastName": row[4],
+    }
+
+
+def _invitation_matches_request(
+    invitation: dict[str, Any],
+    *,
+    friend_user_id: int,
+    movie_id: int,
+    starts_at: Any,
+    ends_at: Any,
+    timezone: str,
+    location: str | None,
+    message: str | None,
+) -> bool:
+    return (
+        invitation["friendUserId"] == friend_user_id
+        and invitation["movieId"] == movie_id
+        and invitation["startsAt"] == _isoformat(starts_at)
+        and invitation["endsAt"] == _isoformat(ends_at)
+        and invitation["timezone"] == timezone
+        and invitation["location"] == location
+        and invitation["message"] == message
+    )
+
+
+def _optional_isoformat(value: Any) -> str | None:
+    return None if value is None else _isoformat(value)
+
 def _canonical_user_pair(user_id: int, other_user_id: int) -> tuple[int, int]:
     return min(user_id, other_user_id), max(user_id, other_user_id)
 

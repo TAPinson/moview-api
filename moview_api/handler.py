@@ -28,6 +28,7 @@ from moview_api.schema import (
     build_mark_watched_response,
     build_remove_like_response,
     build_remove_from_watchlist_response,
+    build_send_movie_invitation_response,
     build_update_user_response,
     build_user_profile_response,
     build_watchlist_entries_response,
@@ -157,6 +158,12 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
     if field_name == "createProfilePhotoUpload":
         return build_create_profile_photo_upload_response(
             _appsync_claims(event), arguments.get("contentType")
+        )
+
+    if field_name == "sendMovieInvitation":
+        return build_send_movie_invitation_response(
+            _appsync_claims(event),
+            arguments.get("input") or {},
         )
 
     if field_name == "addLike":

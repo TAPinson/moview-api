@@ -8,6 +8,10 @@ Parameters:
     NoEcho: true
     Description: ARN of the Secrets Manager secret containing the Neon DATABASE_URL.
 
+  InvitationSenderEmail:
+    Type: String
+    Description: Verified Amazon SES email identity used for movie invitations.
+
 Globals:
   Function:
     Runtime: python3.12
@@ -101,6 +105,7 @@ Resources:
           DATABASE_URL_SECRET_ARN: !Ref DatabaseUrlSecretArn
           TMDB_API_KEY_SECRET_ID: dev/tmdb-api-key
           PROFILE_PHOTO_BUCKET: !Ref MoviewProfilePhotoBucket
+          MOVIEW_INVITATION_SENDER_EMAIL: !Ref InvitationSenderEmail
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:
@@ -116,6 +121,14 @@ Resources:
                 - s3:GetObject
                 - s3:PutObject
               Resource: !Sub ${MoviewProfilePhotoBucket.Arn}/user/*
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: !Sub
+                - arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/${SenderEmail}
+                - SenderEmail: !Ref InvitationSenderEmail
   MoviewUserPoolInvokeFunctionPermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -279,6 +292,22 @@ Resources:
       ApiId: !GetAtt MoviewGraphQLApi.ApiId
       TypeName: Mutation
       FieldName: createProfilePhotoUpload
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  SendMovieInvitationResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: [MoviewGraphQLSchema]
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: sendMovieInvitation
       DataSourceName: !GetAtt MoviewLambdaDataSource.Name
       RequestMappingTemplate: |
         {
@@ -568,4 +597,3 @@ Outputs:
   MoviewApiFunctionArn:
     Description: Lambda function ARN for AppSync data source configuration.
     Value: !GetAtt MoviewApiFunction.Arn
-

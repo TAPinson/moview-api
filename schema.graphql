@@ -12,6 +12,7 @@ type Query {
 type Mutation {
   updateUser(input: UpdateUserProfileInput!): UserProfile!
   createProfilePhotoUpload(contentType: String!): ProfilePhotoUpload!
+  sendMovieInvitation(input: MovieInvitationInput!): MovieInvitation!
   addLike(movieId: Int!): MovieLike!
   removeLike(movieId: Int!): Boolean!
   addToWatchlist(movieId: Int!): WatchlistItem!
@@ -22,6 +23,44 @@ type Mutation {
   declineFriendRequest(userId: Int!): Boolean!
   cancelFriendRequest(userId: Int!): Boolean!
   removeFriend(userId: Int!): Boolean!
+}
+
+input MovieInvitationInput {
+  friendUserId: Int!
+  movieId: Int!
+  startsAt: String!
+  timezone: String!
+  durationMinutes: Int!
+  location: String
+  message: String
+  idempotencyKey: String!
+}
+
+type MovieInvitation {
+  id: Int!
+  createdByUserId: Int!
+  friendUserId: Int!
+  movieId: Int!
+  startsAt: String!
+  endsAt: String!
+  timezone: String!
+  eventSummary: String!
+  location: String
+  message: String
+  calendarSequence: Int!
+  status: MovieInvitationStatus!
+  createdAt: String!
+  updatedAt: String!
+  sentAt: String
+  cancelledAt: String
+}
+
+enum MovieInvitationStatus {
+  pending
+  sending
+  sent
+  failed
+  cancelled
 }
 
 input UpdateUserProfileInput {

@@ -28,6 +28,7 @@ from moview_api.db import (
     update_user_profile,
 )
 from moview_api.profile_photos import create_profile_photo_upload, profile_photo_url
+from moview_api.invitation_service import schedule_movie_invitation
 from moview_api.tmdb import discover_movies_by_genre, get_movie_details, search_movies
 
 
@@ -131,6 +132,31 @@ def resolve_create_profile_photo_upload(
 ) -> dict[str, Any]:
     return build_create_profile_photo_upload_response(
         _identity_claims(info.context or {}), contentType
+    )
+
+
+def resolve_send_movie_invitation(
+    _source: Any,
+    info: GraphQLResolveInfo,
+    input: dict[str, Any],
+) -> dict[str, Any]:
+    return build_send_movie_invitation_response(
+        _identity_claims(info.context or {}),
+        input,
+    )
+
+
+def build_send_movie_invitation_response(
+    claims: dict[str, Any],
+    input: dict[str, Any],
+) -> dict[str, Any]:
+    user_uuid, email = _required_identity(claims)
+    if not isinstance(input, dict):
+        raise RuntimeError("Movie invitation input is required.")
+    return schedule_movie_invitation(
+        user_uuid=user_uuid,
+        email=email,
+        input=input,
     )
 
 
@@ -448,6 +474,9 @@ movies_type.fields["byGenre"].resolve = resolve_movies_by_genre
 mutation_type.fields["updateUser"].resolve = resolve_update_user
 mutation_type.fields["createProfilePhotoUpload"].resolve = (
     resolve_create_profile_photo_upload
+)
+mutation_type.fields["sendMovieInvitation"].resolve = (
+    resolve_send_movie_invitation
 )
 mutation_type.fields["addLike"].resolve = resolve_add_like
 mutation_type.fields["removeLike"].resolve = resolve_remove_like

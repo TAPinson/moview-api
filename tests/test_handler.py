@@ -179,6 +179,63 @@ def test_appsync_create_profile_photo_upload_resolver(monkeypatch) -> None:
     assert lambda_handler(event, context=None) == upload
 
 
+def test_appsync_send_movie_invitation_resolver(monkeypatch) -> None:
+    invitation = {
+        "id": 12,
+        "createdByUserId": 1,
+        "friendUserId": 2,
+        "movieId": 550,
+        "startsAt": "2026-10-03T23:30:00+00:00",
+        "endsAt": "2026-10-04T02:00:00+00:00",
+        "timezone": "America/Kentucky/Louisville",
+        "eventSummary": "Watch Fight Club",
+        "location": None,
+        "message": None,
+        "calendarSequence": 0,
+        "status": "sent",
+        "createdAt": "2026-09-22T12:00:00+00:00",
+        "updatedAt": "2026-09-22T12:01:00+00:00",
+        "sentAt": "2026-09-22T12:01:00+00:00",
+        "cancelledAt": None,
+    }
+    invitation_input = {
+        "friendUserId": 2,
+        "movieId": 550,
+        "startsAt": "2026-10-03T23:30:00Z",
+        "timezone": "America/Kentucky/Louisville",
+        "durationMinutes": 150,
+        "idempotencyKey": "request-123",
+    }
+
+    def fake_build_response(claims, input):
+        assert claims == {
+            "sub": "123e4567-e89b-12d3-a456-426614174000",
+            "email": "ali@example.com",
+        }
+        assert input == invitation_input
+        return invitation
+
+    monkeypatch.setattr(
+        "moview_api.handler.build_send_movie_invitation_response",
+        fake_build_response,
+    )
+    event = {
+        "arguments": {"input": invitation_input},
+        "info": {
+            "fieldName": "sendMovieInvitation",
+            "parentTypeName": "Mutation",
+        },
+        "identity": {
+            "claims": {
+                "sub": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "ali@example.com",
+            }
+        },
+    }
+
+    assert lambda_handler(event, context=None) == invitation
+
+
 def test_appsync_movies_resolver() -> None:
     event = {
         "arguments": {},
