@@ -8,7 +8,7 @@ from typing import Any
 
 from graphql import graphql_sync
 
-from moview_api.db import create_user_profile
+from moview_api.auth import cognito
 from moview_api.tmdb import discover_movies_by_genre, search_movies
 from moview_api.schema import (
     build_accept_friend_request_response,
@@ -42,8 +42,8 @@ JsonObject = dict[str, Any]
 
 def lambda_handler(event: JsonObject, context: Any) -> JsonObject:
     """AWS Lambda entry point for HTTP GraphQL, AppSync, and Cognito events."""
-    if _is_cognito_post_confirmation_event(event):
-        return _handle_cognito_post_confirmation(event)
+    if cognito.is_post_confirmation_event(event):
+        return cognito.handle_post_confirmation(event)
 
     if _is_appsync_resolver_event(event):
         return _handle_appsync_resolver(event, context)
@@ -186,31 +186,6 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
         )
 
     raise ValueError(f"Unsupported AppSync field: {field_name}")
-
-
-def _is_cognito_post_confirmation_event(event: JsonObject) -> bool:
-    trigger_source = event.get("triggerSource")
-    return isinstance(trigger_source, str) and trigger_source.startswith(
-        "PostConfirmation_"
-    )
-
-
-def _handle_cognito_post_confirmation(event: JsonObject) -> JsonObject:
-    request = event.get("request") or {}
-    attributes = request.get("userAttributes") or {}
-    user_uuid = attributes.get("sub")
-    email = attributes.get("email")
-
-    if not user_uuid or not email:
-        raise ValueError("Cognito post-confirmation event is missing sub or email.")
-
-    create_user_profile(
-        user_uuid=user_uuid,
-        email=email,
-        first_name=attributes.get("given_name"),
-        last_name=attributes.get("family_name"),
-    )
-    return event
 
 
 def _is_appsync_resolver_event(event: JsonObject) -> bool:

@@ -36,7 +36,7 @@ def test_cognito_post_confirmation_creates_user_profile(monkeypatch) -> None:
     def fake_create_user_profile(**kwargs) -> None:
         created.update(kwargs)
 
-    monkeypatch.setattr("moview_api.handler.create_user_profile", fake_create_user_profile)
+    monkeypatch.setattr("moview_api.auth.cognito.create_user_profile", fake_create_user_profile)
     event = {
         "triggerSource": "PostConfirmation_ConfirmSignUp",
         "request": {
