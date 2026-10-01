@@ -9,7 +9,7 @@ from typing import Any
 from graphql import graphql_sync
 
 from moview_api.auth import cognito
-from moview_api.tmdb import discover_movies_by_genre, search_movies
+from moview_api.tmdb import discover_movies_by_genre, search_movies, search_people
 from moview_api.schema import (
     build_accept_friend_request_response,
     build_add_like_response,
@@ -102,7 +102,13 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
 
     if field_name == "byGenre":
         return discover_movies_by_genre(
-            arguments.get("genreId"), arguments.get("page", 1)
+            arguments.get("genreId"), arguments.get("page", 1),
+            arguments.get("includeAdult", False), arguments.get("personId"),
+        )
+
+    if field_name == "people":
+        return search_people(
+            arguments.get("query") or "", arguments.get("includeAdult", False)
         )
 
     if field_name == "findUsers":
@@ -277,4 +283,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

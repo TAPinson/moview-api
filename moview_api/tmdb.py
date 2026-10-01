@@ -35,20 +35,65 @@ def search_movies(query: str) -> list[dict[str, Any]]:
     return [_movie_result(result) for result in results if isinstance(result, dict)]
 
 
-def discover_movies_by_genre(genre_id: int, page: int = 1) -> dict[str, Any]:
-    if not isinstance(genre_id, int) or genre_id <= 0:
+def search_people(query: str, include_adult: bool = False) -> list[dict[str, Any]]:
+    normalized_query = query.strip()
+    if not normalized_query:
+        return []
+    params = urlencode({
+        "query": normalized_query,
+        "include_adult": str(include_adult).lower(),
+        "api_key": _tmdb_api_key(),
+    })
+    request = Request(
+        f"https://api.themoviedb.org/3/search/person?{params}",
+        headers={"accept": "application/json", "user-agent": "moview-api"},
+    )
+    with urlopen(request, timeout=10) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    results = payload.get("results", [])
+    if not isinstance(results, list):
+        return []
+    return [
+        {
+            "id": person["id"],
+            "name": person["name"],
+            "department": person.get("known_for_department"),
+        }
+        for person in results
+        if isinstance(person, dict)
+        and isinstance(person.get("id"), int)
+        and isinstance(person.get("name"), str)
+    ]
+
+
+def discover_movies_by_genre(
+    genre_id: int | None, page: int = 1, include_adult: bool = False,
+    person_id: int | None = None,
+) -> dict[str, Any]:
+    if genre_id is not None and (
+        not isinstance(genre_id, int) or genre_id <= 0
+    ):
         raise ValueError("Genre ID must be a positive integer.")
     if not isinstance(page, int) or page < 1 or page > 500:
         raise ValueError("Page must be between 1 and 500.")
 
-    params = urlencode({
-        "with_genres": genre_id,
+    if person_id is not None and (
+        not isinstance(person_id, int) or person_id <= 0
+    ):
+        raise ValueError("Person ID must be a positive integer.")
+
+    filters = {
         "sort_by": "popularity.desc",
-        "include_adult": "false",
+        "include_adult": str(include_adult).lower(),
         "include_video": "false",
         "page": page,
         "api_key": _tmdb_api_key(),
-    })
+    }
+    if person_id is not None:
+        filters["with_people"] = person_id
+    elif genre_id is not None:
+        filters["with_genres"] = genre_id
+    params = urlencode(filters)
     request = Request(
         f"{TMDB_DISCOVER_URL}?{params}",
         headers={"accept": "application/json", "user-agent": "moview-api"},

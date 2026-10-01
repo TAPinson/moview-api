@@ -234,6 +234,23 @@ Resources:
         }
       ResponseMappingTemplate: $util.toJson($context.result)
 
+  MoviesPeopleResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn:
+      - MoviewGraphQLSchema
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Movies
+      FieldName: people
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
   MoviesByGenreResolver:
     Type: AWS::AppSync::Resolver
     DependsOn:

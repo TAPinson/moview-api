@@ -29,7 +29,7 @@ from moview_api.db import (
 )
 from moview_api.profile_photos import create_profile_photo_upload, profile_photo_url
 from moview_api.invitation_service import schedule_movie_invitation
-from moview_api.tmdb import discover_movies_by_genre, get_movie_details, search_movies
+from moview_api.tmdb import discover_movies_by_genre, get_movie_details, search_movies, search_people
 
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.graphql"
@@ -56,9 +56,18 @@ def resolve_movie_search(
 
 
 def resolve_movies_by_genre(
-    _source: Any, _info: GraphQLResolveInfo, genreId: int, page: int
+    _source: Any, _info: GraphQLResolveInfo,
+    genreId: int | None = None, page: int = 1,
+    includeAdult: bool = False, personId: int | None = None,
 ) -> dict[str, Any]:
-    return discover_movies_by_genre(genreId, page)
+    return discover_movies_by_genre(genreId, page, includeAdult, personId)
+
+
+def resolve_movie_people(
+    _source: Any, _info: GraphQLResolveInfo, query: str,
+    includeAdult: bool = False,
+) -> list[dict[str, Any]]:
+    return search_people(query, includeAdult)
 
 
 def resolve_user_search(_source: Any, info: GraphQLResolveInfo, query: str) -> list[dict[str, Any]]:
@@ -471,6 +480,7 @@ users_type.fields["watchlistEntries"].resolve = resolve_watchlist_entries
 users_type.fields["likes"].resolve = resolve_likes
 movies_type.fields["search"].resolve = resolve_movie_search
 movies_type.fields["byGenre"].resolve = resolve_movies_by_genre
+movies_type.fields["people"].resolve = resolve_movie_people
 mutation_type.fields["updateUser"].resolve = resolve_update_user
 mutation_type.fields["createProfilePhotoUpload"].resolve = (
     resolve_create_profile_photo_upload
@@ -488,4 +498,3 @@ mutation_type.fields["acceptFriendRequest"].resolve = lambda _source, info, user
 mutation_type.fields["declineFriendRequest"].resolve = lambda _source, info, userId: build_decline_friend_request_response(_identity_claims(info.context or {}), userId)
 mutation_type.fields["cancelFriendRequest"].resolve = lambda _source, info, userId: build_cancel_friend_request_response(_identity_claims(info.context or {}), userId)
 mutation_type.fields["removeFriend"].resolve = lambda _source, info, userId: build_remove_friend_response(_identity_claims(info.context or {}), userId)
-

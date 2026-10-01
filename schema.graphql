@@ -98,7 +98,14 @@ type Users {
 
 type Movies {
   search(query: String!): [MovieSearchResult!]!
-  byGenre(genreId: Int!, page: Int!): MovieResultPage!
+  people(query: String!, includeAdult: Boolean! = false): [MoviePerson!]!
+  byGenre(genreId: Int, page: Int!, includeAdult: Boolean! = false, personId: Int): MovieResultPage!
+}
+
+type MoviePerson {
+  id: Int!
+  name: String!
+  department: String
 }
 
 enum WatchlistStatus {
