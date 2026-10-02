@@ -69,6 +69,7 @@ def search_people(query: str, include_adult: bool = False) -> list[dict[str, Any
 def discover_movies_by_genre(
     genre_id: int | None, page: int = 1, include_adult: bool = False,
     person_id: int | None = None,
+    certification: str | None = None,
 ) -> dict[str, Any]:
     if genre_id is not None and (
         not isinstance(genre_id, int) or genre_id <= 0
@@ -82,6 +83,9 @@ def discover_movies_by_genre(
     ):
         raise ValueError("Person ID must be a positive integer.")
 
+    if certification is not None and certification not in {"G", "PG", "PG-13", "R", "NC-17"}:
+        raise ValueError("Unsupported US movie certification.")
+
     filters = {
         "sort_by": "popularity.desc",
         "include_adult": str(include_adult).lower(),
@@ -93,6 +97,10 @@ def discover_movies_by_genre(
         filters["with_people"] = person_id
     elif genre_id is not None:
         filters["with_genres"] = genre_id
+    if certification is not None:
+        filters["certification_country"] = "US"
+        filters["region"] = "US"
+        filters["certification"] = certification
     params = urlencode(filters)
     request = Request(
         f"{TMDB_DISCOVER_URL}?{params}",

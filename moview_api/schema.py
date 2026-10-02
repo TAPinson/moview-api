@@ -59,8 +59,9 @@ def resolve_movies_by_genre(
     _source: Any, _info: GraphQLResolveInfo,
     genreId: int | None = None, page: int = 1,
     includeAdult: bool = False, personId: int | None = None,
+    certification: str | None = None,
 ) -> dict[str, Any]:
-    return discover_movies_by_genre(genreId, page, includeAdult, personId)
+    return discover_movies_by_genre(genreId, page, includeAdult, personId, certification)
 
 
 def resolve_movie_people(

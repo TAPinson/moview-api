@@ -104,6 +104,7 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
         return discover_movies_by_genre(
             arguments.get("genreId"), arguments.get("page", 1),
             arguments.get("includeAdult", False), arguments.get("personId"),
+            arguments.get("certification"),
         )
 
     if field_name == "people":

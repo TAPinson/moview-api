@@ -99,7 +99,7 @@ type Users {
 type Movies {
   search(query: String!): [MovieSearchResult!]!
   people(query: String!, includeAdult: Boolean! = false): [MoviePerson!]!
-  byGenre(genreId: Int, page: Int!, includeAdult: Boolean! = false, personId: Int): MovieResultPage!
+  byGenre(genreId: Int, page: Int!, includeAdult: Boolean! = false, personId: Int, certification: String): MovieResultPage!
 }
 
 type MoviePerson {

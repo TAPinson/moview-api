@@ -286,12 +286,14 @@ def test_appsync_movies_by_genre_resolver(monkeypatch) -> None:
     }
 
     def fake_discover_movies_by_genre(
-        genre_id: int, page: int, include_adult: bool, person_id: int | None
+        genre_id: int, page: int, include_adult: bool, person_id: int | None,
+        certification: str | None,
     ):
         assert genre_id == 18
         assert page == 2
         assert include_adult is False
         assert person_id is None
+        assert certification is None
         return results
 
     monkeypatch.setattr(
