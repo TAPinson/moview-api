@@ -29,7 +29,8 @@ from moview_api.db import (
 )
 from moview_api.profile_photos import create_profile_photo_upload, profile_photo_url
 from moview_api.invitation_service import schedule_movie_invitation
-from moview_api.tmdb import discover_movies_by_genre, get_movie_details, search_movies, search_people
+from moview_api.movie_details import enrich_movies
+from moview_api.tmdb import discover_movies_by_genre, search_movies, search_people
 
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.graphql"
@@ -332,7 +333,7 @@ def build_watchlist_response(
 ) -> list[dict[str, Any]]:
     user_uuid, email = _required_identity(claims)
     items = get_watchlist(user_uuid=user_uuid, email=email, status=status)
-    return [_with_movie_details(item) for item in items]
+    return enrich_movies(items)
 
 
 def build_shared_watchlist_response(
@@ -345,7 +346,7 @@ def build_shared_watchlist_response(
         email=email,
         friend_user_id=friend_user_id,
     )
-    return [_with_movie_details(item) for item in items]
+    return enrich_movies(items)
 
 
 def build_watchlist_entries_response(claims: dict[str, Any]) -> list[dict[str, Any]]:
@@ -356,11 +357,7 @@ def build_watchlist_entries_response(claims: dict[str, Any]) -> list[dict[str, A
 def build_likes_response(claims: dict[str, Any]) -> list[dict[str, Any]]:
     user_uuid, email = _required_identity(claims)
     likes = get_movie_likes(user_uuid=user_uuid, email=email)
-    return [_with_movie_details(like) for like in likes]
-
-
-def _with_movie_details(item: dict[str, Any]) -> dict[str, Any]:
-    return {**item, "movie": get_movie_details(item["movieId"])}
+    return enrich_movies(likes)
 
 
 def build_add_to_watchlist_response(

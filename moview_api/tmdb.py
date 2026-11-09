@@ -123,18 +123,20 @@ def discover_movies_by_genre(
     }
 
 
-def get_movie_details(movie_id: int) -> dict[str, Any]:
+def get_movie_details(
+    movie_id: int, *, timeout: float = 10,
+) -> dict[str, Any]:
     params = urlencode({"api_key": _tmdb_api_key()})
     request = Request(
         f"{TMDB_MOVIE_URL}/{movie_id}?{params}",
         headers={"accept": "application/json", "user-agent": "moview-api"},
     )
 
-    with urlopen(request, timeout=10) as response:
+    with urlopen(request, timeout=timeout) as response:
         payload = json.loads(response.read().decode("utf-8"))
 
     if not isinstance(payload, dict):
-        raise RuntimeError("TMDB movie details response was not an object.")
+        raise ValueError("TMDB movie details response was not an object.")
 
     return _movie_result(payload)
 

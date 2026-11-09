@@ -393,12 +393,12 @@ def test_appsync_likes_resolver(monkeypatch) -> None:
         }
         return likes
 
-    def fake_get_movie_details(movie_id: int):
+    def fake_get_movie_details(movie_id: int, *, timeout: float):
         assert movie_id == 343611
         return movie
 
     monkeypatch.setattr("moview_api.schema.get_movie_likes", fake_get_movie_likes)
-    monkeypatch.setattr("moview_api.schema.get_movie_details", fake_get_movie_details)
+    monkeypatch.setattr("moview_api.movie_details.get_movie_details", fake_get_movie_details)
     event = {
         "arguments": {},
         "info": {"fieldName": "likes", "parentTypeName": "Users"},
@@ -449,12 +449,12 @@ def test_appsync_watchlist_resolver(monkeypatch) -> None:
         }
         return items
 
-    def fake_get_movie_details(movie_id: int):
+    def fake_get_movie_details(movie_id: int, *, timeout: float):
         assert movie_id == 343611
         return movie
 
     monkeypatch.setattr("moview_api.schema.get_watchlist", fake_get_watchlist)
-    monkeypatch.setattr("moview_api.schema.get_movie_details", fake_get_movie_details)
+    monkeypatch.setattr("moview_api.movie_details.get_movie_details", fake_get_movie_details)
     event = {
         "arguments": {"status": "want_to_watch"},
         "info": {"fieldName": "watchlist", "parentTypeName": "Users"},

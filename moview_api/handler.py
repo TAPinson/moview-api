@@ -9,6 +9,7 @@ from typing import Any
 from graphql import graphql_sync
 
 from moview_api.auth import cognito
+from moview_api.movie_details import movie_details_budget
 from moview_api.tmdb import discover_movies_by_genre, search_movies, search_people
 from moview_api.schema import (
     build_accept_friend_request_response,
@@ -42,13 +43,14 @@ JsonObject = dict[str, Any]
 
 def lambda_handler(event: JsonObject, context: Any) -> JsonObject:
     """AWS Lambda entry point for HTTP GraphQL, AppSync, and Cognito events."""
-    if cognito.is_post_confirmation_event(event):
-        return cognito.handle_post_confirmation(event)
+    with movie_details_budget(context):
+        if cognito.is_post_confirmation_event(event):
+            return cognito.handle_post_confirmation(event)
 
-    if _is_appsync_resolver_event(event):
-        return _handle_appsync_resolver(event, context)
+        if _is_appsync_resolver_event(event):
+            return _handle_appsync_resolver(event, context)
 
-    return _handle_http_graphql(event, context)
+        return _handle_http_graphql(event, context)
 
 
 def _handle_http_graphql(event: JsonObject, context: Any) -> JsonObject:
