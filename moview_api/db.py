@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import ssl
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import lru_cache
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
@@ -10,6 +12,23 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 DATABASE_URL_KEYS = ("DATABASE_URL", "database_url", "url")
 
+
+@contextmanager
+def _transaction() -> Iterator[Any]:
+    connection = _connect(_database_url())
+    try:
+        try:
+            cursor = connection.cursor()
+            try:
+                yield cursor
+            finally:
+                cursor.close()
+            connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
+    finally:
+        connection.close()
 
 
 def create_user_profile(
@@ -35,44 +54,31 @@ def get_or_create_user_profile(
     last_name: str | None = None,
 ) -> dict[str, Any]:
     username = f"user-{user_uuid}"
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                """
-                insert into users (username, email, admin, first_name, last_name)
-                select %s, %s, false, %s, %s
-                where not exists (
-                    select 1 from users where email = %s or username = %s
-                )
-                """,
-                (username, email, first_name, last_name, email, username),
+    with _transaction() as cursor:
+        cursor.execute(
+            """
+            insert into users (username, email, admin, first_name, last_name)
+            select %s, %s, false, %s, %s
+            where not exists (
+                select 1 from users where email = %s or username = %s
             )
-            cursor.execute(
-                """
-                select id, username, email, admin, first_name, last_name
-                from users
-                where email = %s or username = %s
-                order by id
-                limit 1
-                """,
-                (email, username),
-            )
-            row = cursor.fetchone()
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
-
-    if row is None:
-        raise RuntimeError("User profile was not created.")
-
-    return _user_profile_from_row(row)
+            """,
+            (username, email, first_name, last_name, email, username),
+        )
+        cursor.execute(
+            """
+            select id, username, email, admin, first_name, last_name
+            from users
+            where email = %s or username = %s
+            order by id
+            limit 1
+            """,
+            (email, username),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise RuntimeError("User profile was not created.")
+        return _user_profile_from_row(row)
 
 
 def _user_profile_from_row(row: Any) -> dict[str, Any]:
@@ -92,55 +98,32 @@ def add_movie_like(
     email: str,
     movie_id: int,
 ) -> dict[str, Any]:
-    username = f"user-{user_uuid}"
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                """
-                select id from users
-                where email = %s or username = %s
-                order by id
-                limit 1
-                """,
-                (email, username),
-            )
-            user_row = cursor.fetchone()
-            if user_row is None:
-                raise RuntimeError("User profile was not found.")
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        cursor.execute(
+            """
+            insert into movie_likes (user_id, movie_id)
+            values (%s, %s)
+            on conflict (user_id, movie_id) do nothing
+            """,
+            (user_id, movie_id),
+        )
+        cursor.execute(
+            """
+            select user_id, movie_id, created_at
+            from movie_likes
+            where user_id = %s and movie_id = %s
+            """,
+            (user_id, movie_id),
+        )
+        like_row = cursor.fetchone()
+        if like_row is None:
+            raise RuntimeError("Movie like was not created.")
+        like = _movie_like_from_row(like_row)
 
-            user_id = user_row[0]
-            cursor.execute(
-                """
-                insert into movie_likes (user_id, movie_id)
-                values (%s, %s)
-                on conflict (user_id, movie_id) do nothing
-                """,
-                (user_id, movie_id),
-            )
-            cursor.execute(
-                """
-                select user_id, movie_id, created_at
-                from movie_likes
-                where user_id = %s and movie_id = %s
-                """,
-                (user_id, movie_id),
-            )
-            like_row = cursor.fetchone()
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
-
-    if like_row is None:
-        raise RuntimeError("Movie like was not created.")
-
-    return _movie_like_from_row(like_row)
+    return like
 
 
 def remove_movie_like(
@@ -149,27 +132,18 @@ def remove_movie_like(
     email: str,
     movie_id: int,
 ) -> bool:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                """
-                delete from movie_likes
-                where user_id = %s and movie_id = %s
-                """,
-                (user_id, movie_id),
-            )
-            removed = cursor.rowcount > 0
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        cursor.execute(
+            """
+            delete from movie_likes
+            where user_id = %s and movie_id = %s
+            """,
+            (user_id, movie_id),
+        )
+        removed = cursor.rowcount > 0
 
     return removed
 
@@ -179,27 +153,23 @@ def get_movie_likes(
     user_uuid: str,
     email: str,
 ) -> list[dict[str, Any]]:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                """
-                select user_id, movie_id, created_at
-                from movie_likes
-                where user_id = %s
-                order by created_at desc
-                """,
-                (user_id,),
-            )
-            rows = cursor.fetchall()
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        cursor.execute(
+            """
+            select user_id, movie_id, created_at
+            from movie_likes
+            where user_id = %s
+            order by created_at desc
+            """,
+            (user_id,),
+        )
+        rows = cursor.fetchall()
+        likes = [_movie_like_from_row(row) for row in rows]
 
-    return [_movie_like_from_row(row) for row in rows]
+    return likes
 
 
 def _movie_like_from_row(row: Any) -> dict[str, Any]:
@@ -220,38 +190,34 @@ def get_watchlist(
     email: str,
     status: str | None = None,
 ) -> list[dict[str, Any]]:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            if status:
-                cursor.execute(
-                    """
-                    select user_id, movie_id, status, added_at, watched_at, notes
-                    from movie_watchlist
-                    where user_id = %s and status = %s
-                    order by added_at desc
-                    """,
-                    (user_id, status),
-                )
-            else:
-                cursor.execute(
-                    """
-                    select user_id, movie_id, status, added_at, watched_at, notes
-                    from movie_watchlist
-                    where user_id = %s
-                    order by added_at desc
-                    """,
-                    (user_id,),
-                )
-            rows = cursor.fetchall()
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        if status:
+            cursor.execute(
+                """
+                select user_id, movie_id, status, added_at, watched_at, notes
+                from movie_watchlist
+                where user_id = %s and status = %s
+                order by added_at desc
+                """,
+                (user_id, status),
+            )
+        else:
+            cursor.execute(
+                """
+                select user_id, movie_id, status, added_at, watched_at, notes
+                from movie_watchlist
+                where user_id = %s
+                order by added_at desc
+                """,
+                (user_id,),
+            )
+        rows = cursor.fetchall()
+        items = [_watchlist_item_from_row(row) for row in rows]
 
-    return [_watchlist_item_from_row(row) for row in rows]
+    return items
 
 
 def get_watchlist_entries(
@@ -259,30 +225,26 @@ def get_watchlist_entries(
     user_uuid: str,
     email: str,
 ) -> list[dict[str, Any]]:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                """
-                select user_id, movie_id, status
-                from movie_watchlist
-                where user_id = %s
-                order by added_at desc
-                """,
-                (user_id,),
-            )
-            rows = cursor.fetchall()
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        cursor.execute(
+            """
+            select user_id, movie_id, status
+            from movie_watchlist
+            where user_id = %s
+            order by added_at desc
+            """,
+            (user_id,),
+        )
+        rows = cursor.fetchall()
+        entries = [
+            {"userId": row[0], "movieId": row[1], "status": row[2]}
+            for row in rows
+        ]
 
-    return [
-        {"userId": row[0], "movieId": row[1], "status": row[2]}
-        for row in rows
-    ]
+    return entries
 
 
 def add_to_watchlist(
@@ -291,8 +253,13 @@ def add_to_watchlist(
     email: str,
     movie_id: int,
 ) -> dict[str, Any]:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    return _upsert_watchlist_item(user_id=user_id, movie_id=movie_id, status="want_to_watch")
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        return _upsert_watchlist_item(
+            cursor, user_id=user_id, movie_id=movie_id, status="want_to_watch",
+        )
 
 
 def mark_movie_watched(
@@ -301,8 +268,13 @@ def mark_movie_watched(
     email: str,
     movie_id: int,
 ) -> dict[str, Any]:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    return _upsert_watchlist_item(user_id=user_id, movie_id=movie_id, status="watched")
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        return _upsert_watchlist_item(
+            cursor, user_id=user_id, movie_id=movie_id, status="watched",
+        )
 
 
 def remove_from_watchlist(
@@ -311,88 +283,56 @@ def remove_from_watchlist(
     email: str,
     movie_id: int,
 ) -> bool:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                """
-                delete from movie_watchlist
-                where user_id = %s and movie_id = %s
-                """,
-                (user_id, movie_id),
-            )
-            removed = cursor.rowcount > 0
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        cursor.execute(
+            """
+            delete from movie_watchlist
+            where user_id = %s and movie_id = %s
+            """,
+            (user_id, movie_id),
+        )
+        removed = cursor.rowcount > 0
 
     return removed
 
 
-def _upsert_watchlist_item(*, user_id: int, movie_id: int, status: str) -> dict[str, Any]:
+def _upsert_watchlist_item(
+    cursor: Any, *, user_id: int, movie_id: int, status: str,
+) -> dict[str, Any]:
     watched_at_sql = "now()" if status == "watched" else "null"
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                f"""
-                insert into movie_watchlist (user_id, movie_id, status, watched_at)
-                values (%s, %s, %s, {watched_at_sql})
-                on conflict (user_id, movie_id) do update
-                set status = excluded.status,
-                    watched_at = excluded.watched_at
-                returning user_id, movie_id, status, added_at, watched_at, notes
-                """,
-                (user_id, movie_id, status),
-            )
-            row = cursor.fetchone()
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
-
+    cursor.execute(
+        f"""
+        insert into movie_watchlist (user_id, movie_id, status, watched_at)
+        values (%s, %s, %s, {watched_at_sql})
+        on conflict (user_id, movie_id) do update
+        set status = excluded.status,
+            watched_at = excluded.watched_at
+        returning user_id, movie_id, status, added_at, watched_at, notes
+        """,
+        (user_id, movie_id, status),
+    )
+    row = cursor.fetchone()
     if row is None:
         raise RuntimeError("Watchlist item was not saved.")
-
     return _watchlist_item_from_row(row)
 
 
-def _user_id_for_identity(*, user_uuid: str, email: str) -> int:
-    username = f"user-{user_uuid}"
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                """
-                select id from users
-                where email = %s or username = %s
-                order by id
-                limit 1
-                """,
-                (email, username),
-            )
-            row = cursor.fetchone()
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
-
+def _lookup_user_id(cursor: Any, *, user_uuid: str, email: str) -> int:
+    cursor.execute(
+        """
+        select id from users
+        where email = %s or username = %s
+        order by id
+        limit 1
+        """,
+        (email, f"user-{user_uuid}"),
+    )
+    row = cursor.fetchone()
     if row is None:
         raise RuntimeError("User profile was not found.")
-
     return row[0]
 
 
@@ -423,35 +363,22 @@ def update_user_profile(
     last_name: str | None,
 ) -> dict[str, Any]:
     default_username = f"user-{user_uuid}"
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                """
-                update users
-                set username = %s,
-                    first_name = %s,
-                    last_name = %s
-                where email = %s or username = %s
-                returning id, username, email, admin, first_name, last_name
-                """,
-                (username, first_name, last_name, email, default_username),
-            )
-            row = cursor.fetchone()
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
-
-    if row is None:
-        raise RuntimeError("User profile was not found.")
-
-    return _user_profile_from_row(row)
+    with _transaction() as cursor:
+        cursor.execute(
+            """
+            update users
+            set username = %s,
+                first_name = %s,
+                last_name = %s
+            where email = %s or username = %s
+            returning id, username, email, admin, first_name, last_name
+            """,
+            (username, first_name, last_name, email, default_username),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise RuntimeError("User profile was not found.")
+        return _user_profile_from_row(row)
 
 
 def _connect(database_url: str) -> Any:
@@ -531,159 +458,153 @@ def _parse_database_url_secret(secret: str) -> str:
 def search_users_for_friends(
     *, user_uuid: str, email: str, query: str
 ) -> list[dict[str, Any]]:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    normalized_query = query.strip()
-    if not normalized_query:
-        return []
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        normalized_query = query.strip()
+        if not normalized_query:
+            return []
 
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                """
-                select u.id, u.username, u.first_name, u.last_name
-                from users u
-                where u.id <> %s
-                  and u.username ilike %s
-                  and not exists (
-                    select 1
-                    from friendships f
-                    where f.user_low_id = least(cast(%s as integer), u.id)
-                      and f.user_high_id = greatest(cast(%s as integer), u.id)
-                  )
-                order by u.username
-                limit 20
-                """,
-                (user_id, f"%{normalized_query}%", user_id, user_id),
-            )
-            rows = cursor.fetchall()
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
-
-    return [_public_user_from_row(row) for row in rows]
+        cursor.execute(
+            """
+            select u.id, u.username, u.first_name, u.last_name
+            from users u
+            where u.id <> %s
+              and u.username ilike %s
+              and not exists (
+                select 1
+                from friendships f
+                where f.user_low_id = least(cast(%s as integer), u.id)
+                  and f.user_high_id = greatest(cast(%s as integer), u.id)
+              )
+            order by u.username
+            limit 20
+            """,
+            (user_id, f"%{normalized_query}%", user_id, user_id),
+        )
+        rows = cursor.fetchall()
+        return [_public_user_from_row(row) for row in rows]
 
 
 def get_friends(*, user_uuid: str, email: str) -> list[dict[str, Any]]:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    return _get_relationships(user_id=user_id, status="accepted")
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        return _get_relationships(cursor, user_id=user_id, status="accepted")
 
 
 def get_incoming_friend_requests(
     *, user_uuid: str, email: str
 ) -> list[dict[str, Any]]:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    return _get_relationships(
-        user_id=user_id, status="pending", requested_by_current_user=False
-    )
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        return _get_relationships(
+            cursor,
+            user_id=user_id,
+            status="pending",
+            requested_by_current_user=False,
+        )
 
 
 def get_outgoing_friend_requests(
     *, user_uuid: str, email: str
 ) -> list[dict[str, Any]]:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    return _get_relationships(
-        user_id=user_id, status="pending", requested_by_current_user=True
-    )
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        return _get_relationships(
+            cursor,
+            user_id=user_id,
+            status="pending",
+            requested_by_current_user=True,
+        )
 
 
 def send_friend_request(
     *, user_uuid: str, email: str, target_user_id: int
 ) -> dict[str, Any]:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    target_user_id = _required_target_user_id(target_user_id)
-    if user_id == target_user_id:
-        raise RuntimeError("You cannot send a friend request to yourself.")
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        target_user_id = _required_target_user_id(target_user_id)
+        if user_id == target_user_id:
+            raise RuntimeError("You cannot send a friend request to yourself.")
 
-    user_low_id = min(user_id, target_user_id)
-    user_high_id = max(user_id, target_user_id)
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute("select id from users where id = %s", (target_user_id,))
-            if cursor.fetchone() is None:
-                raise RuntimeError("User was not found.")
-            cursor.execute(
-                """
-                insert into friendships (
-                  user_low_id, user_high_id, requested_by_user_id, status
-                )
-                values (%s, %s, %s, 'pending')
-                on conflict (user_low_id, user_high_id) do nothing
-                returning created_at, updated_at
-                """,
-                (user_low_id, user_high_id, user_id),
+        user_low_id = min(user_id, target_user_id)
+        user_high_id = max(user_id, target_user_id)
+        cursor.execute("select id from users where id = %s", (target_user_id,))
+        if cursor.fetchone() is None:
+            raise RuntimeError("User was not found.")
+
+        cursor.execute(
+            """
+            insert into friendships (
+              user_low_id, user_high_id, requested_by_user_id, status
             )
-            row = cursor.fetchone()
-            if row is None:
-                raise RuntimeError("A friend request or friendship already exists.")
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
+            values (%s, %s, %s, 'pending')
+            on conflict (user_low_id, user_high_id) do nothing
+            returning created_at, updated_at
+            """,
+            (user_low_id, user_high_id, user_id),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise RuntimeError("A friend request or friendship already exists.")
 
-    return _relationship_with_user(
-        user_id=target_user_id,
-        status="pending",
-        created_at=row[0],
-        updated_at=row[1],
-    )
+        return _relationship_with_user(
+            cursor,
+            user_id=target_user_id,
+            status="pending",
+            created_at=row[0],
+            updated_at=row[1],
+        )
 
 
 def accept_friend_request(
     *, user_uuid: str, email: str, requester_user_id: int
 ) -> dict[str, Any]:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    requester_user_id = _required_target_user_id(requester_user_id)
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                """
-                update friendships
-                set status = 'accepted', updated_at = now()
-                where user_low_id = least(cast(%s as integer), cast(%s as integer))
-                  and user_high_id = greatest(cast(%s as integer), cast(%s as integer))
-                  and status = 'pending'
-                  and requested_by_user_id = cast(%s as integer)
-                  and requested_by_user_id <> cast(%s as integer)
-                returning created_at, updated_at
-                """,
-                (
-                    user_id,
-                    requester_user_id,
-                    user_id,
-                    requester_user_id,
-                    requester_user_id,
-                    user_id,
-                ),
-            )
-            row = cursor.fetchone()
-            if row is None:
-                raise RuntimeError("Incoming friend request was not found.")
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        requester_user_id = _required_target_user_id(requester_user_id)
+        cursor.execute(
+            """
+            update friendships
+            set status = 'accepted', updated_at = now()
+            where user_low_id = least(cast(%s as integer), cast(%s as integer))
+              and user_high_id = greatest(cast(%s as integer), cast(%s as integer))
+              and status = 'pending'
+              and requested_by_user_id = cast(%s as integer)
+              and requested_by_user_id <> cast(%s as integer)
+            returning created_at, updated_at
+            """,
+            (
+                user_id,
+                requester_user_id,
+                user_id,
+                requester_user_id,
+                requester_user_id,
+                user_id,
+            ),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise RuntimeError("Incoming friend request was not found.")
 
-    return _relationship_with_user(
-        user_id=requester_user_id,
-        status="accepted",
-        created_at=row[0],
-        updated_at=row[1],
-    )
+        return _relationship_with_user(
+            cursor,
+            user_id=requester_user_id,
+            status="accepted",
+            created_at=row[0],
+            updated_at=row[1],
+        )
 
 
 def decline_friend_request(
@@ -725,57 +646,50 @@ def get_shared_watchlist(
     email: str,
     friend_user_id: int,
 ) -> list[dict[str, Any]]:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    friend_user_id = _required_target_user_id(friend_user_id)
-    user_low_id, user_high_id = _canonical_user_pair(user_id, friend_user_id)
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        friend_user_id = _required_target_user_id(friend_user_id)
+        user_low_id, user_high_id = _canonical_user_pair(user_id, friend_user_id)
 
-    if user_id == friend_user_id:
-        raise RuntimeError("Select one of your friends.")
+        if user_id == friend_user_id:
+            raise RuntimeError("Select one of your friends.")
 
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                """
-                select 1
-                from friendships
-                where user_low_id = cast(%s as integer)
-                  and user_high_id = cast(%s as integer)
-                  and status = 'accepted'
-                """,
-                (user_low_id, user_high_id),
-            )
-            if cursor.fetchone() is None:
-                raise RuntimeError("The selected user is not an accepted friend.")
+        cursor.execute(
+            """
+            select 1
+            from friendships
+            where user_low_id = cast(%s as integer)
+              and user_high_id = cast(%s as integer)
+              and status = 'accepted'
+            """,
+            (user_low_id, user_high_id),
+        )
+        if cursor.fetchone() is None:
+            raise RuntimeError("The selected user is not an accepted friend.")
 
-            cursor.execute(
-                """
-                select mine.user_id,
-                       mine.movie_id,
-                       mine.status,
-                       mine.added_at,
-                       mine.watched_at,
-                       mine.notes
-                from movie_watchlist mine
-                join movie_watchlist theirs
-                  on theirs.movie_id = mine.movie_id
-                 and theirs.user_id = cast(%s as integer)
-                where mine.user_id = cast(%s as integer)
-                  and mine.status = 'want_to_watch'
-                  and theirs.status = 'want_to_watch'
-                order by mine.added_at desc
-                """,
-                (friend_user_id, user_id),
-            )
-            rows = cursor.fetchall()
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
-
-    return [_watchlist_item_from_row(row) for row in rows]
-
+        cursor.execute(
+            """
+            select mine.user_id,
+                   mine.movie_id,
+                   mine.status,
+                   mine.added_at,
+                   mine.watched_at,
+                   mine.notes
+            from movie_watchlist mine
+            join movie_watchlist theirs
+              on theirs.movie_id = mine.movie_id
+             and theirs.user_id = cast(%s as integer)
+            where mine.user_id = cast(%s as integer)
+              and mine.status = 'want_to_watch'
+              and theirs.status = 'want_to_watch'
+            order by mine.added_at desc
+            """,
+            (friend_user_id, user_id),
+        )
+        rows = cursor.fetchall()
+        return [_watchlist_item_from_row(row) for row in rows]
 
 
 def create_movie_invitation(
@@ -793,176 +707,113 @@ def create_movie_invitation(
     message: str | None,
     idempotency_key: str,
 ) -> dict[str, Any]:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    friend_user_id = _required_target_user_id(friend_user_id)
-    user_low_id, user_high_id = _canonical_user_pair(
-        user_id,
-        friend_user_id,
-    )
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        friend_user_id = _required_target_user_id(friend_user_id)
+        user_low_id, user_high_id = _canonical_user_pair(
+            user_id, friend_user_id,
+        )
+        if user_id == friend_user_id:
+            raise RuntimeError("Select one of your friends.")
 
-    if user_id == friend_user_id:
-        raise RuntimeError("Select one of your friends.")
+        cursor.execute(
+            """
+            select 1
+            from friendships
+            where user_low_id = cast(%s as integer)
+              and user_high_id = cast(%s as integer)
+              and status = 'accepted'
+            """,
+            (user_low_id, user_high_id),
+        )
+        if cursor.fetchone() is None:
+            raise RuntimeError("The selected user is not an accepted friend.")
 
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                """
-                select 1
-                from friendships
-                where user_low_id = cast(%s as integer)
-                  and user_high_id = cast(%s as integer)
-                  and status = 'accepted'
-                """,
-                (user_low_id, user_high_id),
+        cursor.execute(
+            """
+            select 1
+            from movie_watchlist mine
+            join movie_watchlist theirs
+              on theirs.movie_id = mine.movie_id
+             and theirs.user_id = cast(%s as integer)
+            where mine.user_id = cast(%s as integer)
+              and mine.movie_id = cast(%s as integer)
+              and mine.status = 'want_to_watch'
+              and theirs.status = 'want_to_watch'
+            """,
+            (friend_user_id, user_id, movie_id),
+        )
+        if cursor.fetchone() is None:
+            raise RuntimeError("The selected movie is not on both watchlists.")
+
+        cursor.execute(
+            """
+            insert into movie_invitations (
+              uid, created_by_user_id, friend_user_id, movie_id,
+              starts_at, ends_at, timezone, event_summary,
+              location, message, idempotency_key
             )
-            if cursor.fetchone() is None:
-                raise RuntimeError(
-                    "The selected user is not an accepted friend."
-                )
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            on conflict (created_by_user_id, idempotency_key)
+            do update set idempotency_key = excluded.idempotency_key
+            returning
+              id, uid, created_by_user_id, friend_user_id, movie_id,
+              starts_at, ends_at, timezone, event_summary, location,
+              message, calendar_sequence, status, idempotency_key,
+              provider_message_id, created_at, updated_at,
+              sent_at, cancelled_at
+            """,
+            (
+                uid, user_id, friend_user_id, movie_id,
+                starts_at, ends_at, timezone, event_summary,
+                location, message, idempotency_key,
+            ),
+        )
+        invitation_row = cursor.fetchone()
+        if invitation_row is None:
+            raise RuntimeError("Movie invitation was not created.")
 
-            cursor.execute(
-                """
-                select 1
-                from movie_watchlist mine
-                join movie_watchlist theirs
-                  on theirs.movie_id = mine.movie_id
-                 and theirs.user_id = cast(%s as integer)
-                where mine.user_id = cast(%s as integer)
-                  and mine.movie_id = cast(%s as integer)
-                  and mine.status = 'want_to_watch'
-                  and theirs.status = 'want_to_watch'
-                """,
-                (friend_user_id, user_id, movie_id),
+        invitation = _movie_invitation_from_row(invitation_row)
+        if not _invitation_matches_request(
+            invitation,
+            friend_user_id=friend_user_id,
+            movie_id=movie_id,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            timezone=timezone,
+            location=location,
+            message=message,
+        ):
+            raise RuntimeError(
+                "The idempotency key was already used for "
+                "a different invitation."
             )
-            if cursor.fetchone() is None:
-                raise RuntimeError(
-                    "The selected movie is not on both watchlists."
-                )
 
-            cursor.execute(
-                """
-                insert into movie_invitations (
-                  uid,
-                  created_by_user_id,
-                  friend_user_id,
-                  movie_id,
-                  starts_at,
-                  ends_at,
-                  timezone,
-                  event_summary,
-                  location,
-                  message,
-                  idempotency_key
-                )
-                values (
-                  %s,
-                  %s,
-                  %s,
-                  %s,
-                  %s,
-                  %s,
-                  %s,
-                  %s,
-                  %s,
-                  %s,
-                  %s
-                )
-                on conflict (
-                  created_by_user_id,
-                  idempotency_key
-                )
-                do update set
-                  idempotency_key = excluded.idempotency_key
-                returning
-                  id,
-                  uid,
-                  created_by_user_id,
-                  friend_user_id,
-                  movie_id,
-                  starts_at,
-                  ends_at,
-                  timezone,
-                  event_summary,
-                  location,
-                  message,
-                  calendar_sequence,
-                  status,
-                  idempotency_key,
-                  provider_message_id,
-                  created_at,
-                  updated_at,
-                  sent_at,
-                  cancelled_at
-                """,
-                (
-                    uid,
-                    user_id,
-                    friend_user_id,
-                    movie_id,
-                    starts_at,
-                    ends_at,
-                    timezone,
-                    event_summary,
-                    location,
-                    message,
-                    idempotency_key,
-                ),
-            )
-            invitation_row = cursor.fetchone()
-            if invitation_row is None:
-                raise RuntimeError("Movie invitation was not created.")
+        cursor.execute(
+            """
+            select id, username, email, first_name, last_name
+            from users
+            where id in (%s, %s)
+            order by id
+            """,
+            (user_id, friend_user_id),
+        )
+        participants = {
+            row[0]: _invitation_participant_from_row(row)
+            for row in cursor.fetchall()
+        }
+        sender = participants.get(user_id)
+        friend = participants.get(friend_user_id)
+        if sender is None or friend is None:
+            raise RuntimeError("Invitation participants were not found.")
 
-            invitation = _movie_invitation_from_row(invitation_row)
-            if not _invitation_matches_request(
-                invitation,
-                friend_user_id=friend_user_id,
-                movie_id=movie_id,
-                starts_at=starts_at,
-                ends_at=ends_at,
-                timezone=timezone,
-                location=location,
-                message=message,
-            ):
-                raise RuntimeError(
-                    "The idempotency key was already used for "
-                    "a different invitation."
-                )
-
-            cursor.execute(
-                """
-                select id, username, email, first_name, last_name
-                from users
-                where id in (%s, %s)
-                order by id
-                """,
-                (user_id, friend_user_id),
-            )
-            participant_rows = cursor.fetchall()
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
-
-    participants = {
-        row[0]: _invitation_participant_from_row(row)
-        for row in participant_rows
-    }
-    sender = participants.get(user_id)
-    friend = participants.get(friend_user_id)
-    if sender is None or friend is None:
-        raise RuntimeError("Invitation participants were not found.")
-
-    return {
-        **invitation,
-        "sender": sender,
-        "friend": friend,
-    }
+        return {
+            **invitation,
+            "sender": sender,
+            "friend": friend,
+        }
 
 
 def mark_movie_invitation_sent(
@@ -998,65 +849,36 @@ def _update_movie_invitation_delivery(
     provider_message_id: str | None,
     error_message: str | None,
 ) -> dict[str, Any]:
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                """
-                update movie_invitations
-                set status = %s,
-                    provider_message_id = %s,
-                    error_message = %s,
-                    sent_at = case
-                      when %s = 'sent' then now()
-                      else sent_at
-                    end,
-                    updated_at = now()
-                where id = %s
-                  and status <> 'cancelled'
-                returning
-                  id,
-                  uid,
-                  created_by_user_id,
-                  friend_user_id,
-                  movie_id,
-                  starts_at,
-                  ends_at,
-                  timezone,
-                  event_summary,
-                  location,
-                  message,
-                  calendar_sequence,
-                  status,
-                  idempotency_key,
-                  provider_message_id,
-                  created_at,
-                  updated_at,
-                  sent_at,
-                  cancelled_at
-                """,
-                (
-                    status,
-                    provider_message_id,
-                    error_message,
-                    status,
-                    invitation_id,
-                ),
-            )
-            row = cursor.fetchone()
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
-
-    if row is None:
-        raise RuntimeError("Movie invitation was not found.")
-    return _movie_invitation_from_row(row)
+    with _transaction() as cursor:
+        cursor.execute(
+            """
+            update movie_invitations
+            set status = %s,
+                provider_message_id = %s,
+                error_message = %s,
+                sent_at = case
+                  when %s = 'sent' then now()
+                  else sent_at
+                end,
+                updated_at = now()
+            where id = %s
+              and status <> 'cancelled'
+            returning
+              id, uid, created_by_user_id, friend_user_id, movie_id,
+              starts_at, ends_at, timezone, event_summary, location,
+              message, calendar_sequence, status, idempotency_key,
+              provider_message_id, created_at, updated_at,
+              sent_at, cancelled_at
+            """,
+            (
+                status, provider_message_id, error_message,
+                status, invitation_id,
+            ),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise RuntimeError("Movie invitation was not found.")
+        return _movie_invitation_from_row(row)
 
 
 def _movie_invitation_from_row(row: Any) -> dict[str, Any]:
@@ -1123,6 +945,7 @@ def _canonical_user_pair(user_id: int, other_user_id: int) -> tuple[int, int]:
 
 
 def _get_relationships(
+    cursor: Any,
     *,
     user_id: int,
     status: str,
@@ -1138,32 +961,23 @@ def _get_relationships(
     if requested_by_current_user is not None:
         params.append(user_id)
 
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                f"""
-                select u.id, u.username, u.first_name, u.last_name,
-                       f.status, f.created_at, f.updated_at
-                from friendships f
-                join users u on u.id = case
-                  when f.user_low_id = %s then f.user_high_id
-                  else f.user_low_id
-                end
-                where (f.user_low_id = %s or f.user_high_id = %s)
-                  and f.status = %s
-                  {requester_clause}
-                order by f.updated_at desc
-                """,
-                tuple(params),
-            )
-            rows = cursor.fetchall()
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
-
+    cursor.execute(
+        f"""
+        select u.id, u.username, u.first_name, u.last_name,
+               f.status, f.created_at, f.updated_at
+        from friendships f
+        join users u on u.id = case
+          when f.user_low_id = %s then f.user_high_id
+          else f.user_low_id
+        end
+        where (f.user_low_id = %s or f.user_high_id = %s)
+          and f.status = %s
+          {requester_clause}
+        order by f.updated_at desc
+        """,
+        tuple(params),
+    )
+    rows = cursor.fetchall()
     return [_relationship_from_row(row) for row in rows]
 
 
@@ -1176,59 +990,43 @@ def _delete_relationship(
     requester_must_be_current: bool = False,
     requester_must_be_target: bool = False,
 ) -> bool:
-    user_id = _user_id_for_identity(user_uuid=user_uuid, email=email)
-    target_user_id = _required_target_user_id(target_user_id)
-    requester_clause = ""
-    params: list[Any] = [user_id, target_user_id, user_id, target_user_id, status]
-    if requester_must_be_current:
-        requester_clause = "and requested_by_user_id = cast(%s as integer)"
-        params.append(user_id)
-    elif requester_must_be_target:
-        requester_clause = "and requested_by_user_id = cast(%s as integer)"
-        params.append(target_user_id)
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        target_user_id = _required_target_user_id(target_user_id)
+        requester_clause = ""
+        params: list[Any] = [
+            user_id, target_user_id, user_id, target_user_id, status,
+        ]
+        if requester_must_be_current:
+            requester_clause = "and requested_by_user_id = cast(%s as integer)"
+            params.append(user_id)
+        elif requester_must_be_target:
+            requester_clause = "and requested_by_user_id = cast(%s as integer)"
+            params.append(target_user_id)
 
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                f"""
-                delete from friendships
-                where user_low_id = least(cast(%s as integer), cast(%s as integer))
-                  and user_high_id = greatest(cast(%s as integer), cast(%s as integer))
-                  and status = %s
-                  {requester_clause}
-                """,
-                tuple(params),
-            )
-            removed = cursor.rowcount > 0
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
-    return removed
+        cursor.execute(
+            f"""
+            delete from friendships
+            where user_low_id = least(cast(%s as integer), cast(%s as integer))
+              and user_high_id = greatest(cast(%s as integer), cast(%s as integer))
+              and status = %s
+              {requester_clause}
+            """,
+            tuple(params),
+        )
+        return cursor.rowcount > 0
 
 
 def _relationship_with_user(
-    *, user_id: int, status: str, created_at: Any, updated_at: Any
+    cursor: Any, *, user_id: int, status: str, created_at: Any, updated_at: Any
 ) -> dict[str, Any]:
-    connection = _connect(_database_url())
-    try:
-        cursor = connection.cursor()
-        try:
-            cursor.execute(
-                "select id, username, first_name, last_name from users where id = %s",
-                (user_id,),
-            )
-            user_row = cursor.fetchone()
-        finally:
-            cursor.close()
-    finally:
-        connection.close()
+    cursor.execute(
+        "select id, username, first_name, last_name from users where id = %s",
+        (user_id,),
+    )
+    user_row = cursor.fetchone()
     if user_row is None:
         raise RuntimeError("User was not found.")
     return {
