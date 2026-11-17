@@ -4,12 +4,18 @@ schema {
 }
 
 type Query {
+  movieComments(
+    movieId: Int!
+    before: MovieCommentCursorInput
+  ): MovieCommentPage!
   health: Health!
   users: Users!
   movies: Movies!
 }
 
 type Mutation {
+  addMovieComment(movieId: Int!, body: String!): MovieComment!
+  deleteMovieComment(commentId: Int!): Boolean!
   updateUser(input: UpdateUserProfileInput!): UserProfile!
   createProfilePhotoUpload(contentType: String!): ProfilePhotoUpload!
   sendMovieInvitation(input: MovieInvitationInput!): MovieInvitation!
@@ -188,4 +194,28 @@ type UserProfile {
   firstName: String
   lastName: String
   profilePhotoUrl: String
+}
+
+input MovieCommentCursorInput {
+  createdAt: String!
+  id: Int!
+}
+
+type MovieComment {
+  id: Int!
+  movieId: Int!
+  author: PublicUserProfile!
+  body: String!
+  createdAt: String!
+  canDelete: Boolean!
+}
+
+type MovieCommentPage {
+  comments: [MovieComment!]!
+  nextCursor: MovieCommentCursor
+}
+
+type MovieCommentCursor {
+  createdAt: String!
+  id: Int!
 }

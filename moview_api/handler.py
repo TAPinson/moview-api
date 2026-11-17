@@ -12,6 +12,9 @@ from moview_api.auth import cognito
 from moview_api.movie_details import movie_details_budget
 from moview_api.tmdb import discover_movies_by_genre, search_movies, search_people
 from moview_api.schema import (
+    build_movie_comments_response,
+    build_add_movie_comment_response,
+    build_delete_movie_comment_response,
     build_accept_friend_request_response,
     build_add_like_response,
     build_cancel_friend_request_response,
@@ -192,6 +195,26 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
     if field_name == "removeFromWatchlist":
         return build_remove_from_watchlist_response(
             _appsync_claims(event), arguments.get("movieId")
+        )
+
+    if field_name == "movieComments":
+        return build_movie_comments_response(
+            _appsync_claims(event),
+            arguments.get("movieId"),
+            arguments.get("before"),
+        )
+
+    if field_name == "addMovieComment":
+        return build_add_movie_comment_response(
+            _appsync_claims(event),
+            arguments.get("movieId"),
+            arguments.get("body"),
+        )
+
+    if field_name == "deleteMovieComment":
+        return build_delete_movie_comment_response(
+            _appsync_claims(event),
+            arguments.get("commentId"),
         )
 
     raise ValueError(f"Unsupported AppSync field: {field_name}")

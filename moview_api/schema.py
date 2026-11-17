@@ -5,6 +5,7 @@ from typing import Any
 
 from graphql import GraphQLResolveInfo, build_schema
 
+from moview_api.comments import add_comment, delete_comment, list_comments
 from moview_api.db import (
     accept_friend_request,
     cancel_friend_request,
@@ -449,6 +450,70 @@ def _optional_claim(claims: dict[str, Any], key: str) -> str | None:
     return str(value) if value else None
 
 
+def build_movie_comments_response(
+    claims: dict[str, Any],
+    movie_id: int,
+    before: Any = None,
+) -> dict[str, Any]:
+    user_uuid, email = _required_identity(claims)
+    return list_comments(
+        user_uuid=user_uuid, email=email, movie_id=movie_id, before=before,
+    )
+
+
+def build_add_movie_comment_response(
+    claims: dict[str, Any],
+    movie_id: int,
+    body: str,
+) -> dict[str, Any]:
+    user_uuid, email = _required_identity(claims)
+    return add_comment(
+        user_uuid=user_uuid, email=email, movie_id=movie_id, body=body,
+    )
+
+
+def build_delete_movie_comment_response(
+    claims: dict[str, Any],
+    comment_id: int,
+) -> bool:
+    user_uuid, email = _required_identity(claims)
+    return delete_comment(
+        user_uuid=user_uuid, email=email, comment_id=comment_id,
+    )
+
+
+def resolve_movie_comments(
+    _source: Any,
+    info: GraphQLResolveInfo,
+    movieId: int,
+    before: Any = None,
+) -> dict[str, Any]:
+    return build_movie_comments_response(
+        _identity_claims(info.context or {}), movieId, before,
+    )
+
+
+def resolve_add_movie_comment(
+    _source: Any,
+    info: GraphQLResolveInfo,
+    movieId: int,
+    body: str,
+) -> dict[str, Any]:
+    return build_add_movie_comment_response(
+        _identity_claims(info.context or {}), movieId, body,
+    )
+
+
+def resolve_delete_movie_comment(
+    _source: Any,
+    info: GraphQLResolveInfo,
+    commentId: int,
+) -> bool:
+    return build_delete_movie_comment_response(
+        _identity_claims(info.context or {}), commentId,
+    )
+
+
 schema = build_schema(SCHEMA_PATH.read_text(encoding="utf-8"))
 query_type = schema.get_type("Query")
 users_type = schema.get_type("Users")
@@ -496,3 +561,7 @@ mutation_type.fields["acceptFriendRequest"].resolve = lambda _source, info, user
 mutation_type.fields["declineFriendRequest"].resolve = lambda _source, info, userId: build_decline_friend_request_response(_identity_claims(info.context or {}), userId)
 mutation_type.fields["cancelFriendRequest"].resolve = lambda _source, info, userId: build_cancel_friend_request_response(_identity_claims(info.context or {}), userId)
 mutation_type.fields["removeFriend"].resolve = lambda _source, info, userId: build_remove_friend_response(_identity_claims(info.context or {}), userId)
+
+query_type.fields["movieComments"].resolve = resolve_movie_comments
+mutation_type.fields["addMovieComment"].resolve = resolve_add_movie_comment
+mutation_type.fields["deleteMovieComment"].resolve = resolve_delete_movie_comment
