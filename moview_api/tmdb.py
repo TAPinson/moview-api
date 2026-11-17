@@ -7,6 +7,8 @@ from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from moview_api.movies import save_movies
+
 
 TMDB_MOVIE_URL = "https://api.themoviedb.org/3/movie"
 TMDB_SEARCH_URL = "https://api.themoviedb.org/3/search/movie"
@@ -32,7 +34,13 @@ def search_movies(query: str) -> list[dict[str, Any]]:
     if not isinstance(results, list):
         return []
 
-    return [_movie_result(result) for result in results if isinstance(result, dict)]
+    movies = [
+        _movie_result(result)
+        for result in results
+        if isinstance(result, dict)
+    ]
+    save_movies(movies)
+    return movies
 
 
 def search_people(query: str, include_adult: bool = False) -> list[dict[str, Any]]:
@@ -114,12 +122,17 @@ def discover_movies_by_genre(
     if not isinstance(results, list):
         results = []
 
+    movies = [
+        _movie_result(result)
+        for result in results
+        if isinstance(result, dict)
+    ]
+    save_movies(movies)
+
     return {
         "page": payload.get("page", page),
         "totalPages": payload.get("total_pages", 1),
-        "results": [
-            _movie_result(result) for result in results if isinstance(result, dict)
-        ],
+        "results": movies,
     }
 
 

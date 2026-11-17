@@ -57,6 +57,7 @@ def postgres_url():
 
         for filename in (
             "users.sql",
+            "movies.sql",
             "movie_watchlist.sql",
             "movie_likes.sql",
             "friendships.sql",
@@ -308,3 +309,55 @@ def test_response_failure_rolls_back_invitation(invitation_request, monkeypatch)
 
     assert rows("select count(*) from movie_invitations")[0][0] == 0
     assert db.create_movie_invitation(**invitation_request)["status"] == "pending"
+
+
+def test_movie_storage_and_refresh(accounts, monkeypatch):
+    from moview_api import movie_details, movies
+
+    monkeypatch.setattr(movie_details, "load_movies", movies.load_movies)
+    monkeypatch.setattr(movie_details, "save_movies", movies.save_movies)
+
+    original = {
+        field: None
+        for field in movies.MOVIE_FIELDS
+    }
+    original.update({
+        "id": 550,
+        "title": "Original",
+        "release_date": "1999-10-15",
+        "genre_ids": [18, 53],
+        "adult": False,
+        "video": False,
+        "vote_count": 100,
+        "vote_average": 8.5,
+    })
+    movies.save_movies([original, {**original, "id": 551, "release_date": ""}])
+
+    stored = movies.load_movies([550, 551])
+    assert stored[550]["movie"] == original
+    assert stored[551]["movie"]["release_date"] is None
+    old_timestamp = stored[550]["updatedAt"] - timedelta(days=31)
+    rows(
+        "update movies set updated_at = %s where id = %s returning id",
+        (old_timestamp, 550),
+    )
+
+    calls = []
+
+    def fetch(movie_id, *, timeout):
+        calls.append(movie_id)
+        return {**original, "title": "Refreshed"}
+
+    monkeypatch.setattr(movie_details, "get_movie_details", fetch)
+
+    items = [{"movieId": 550}]
+    first = movie_details.enrich_movies(items)
+    second = movie_details.enrich_movies(items)
+
+    assert first[0]["movie"]["title"] == "Refreshed"
+    assert second == first
+    assert calls == [550]
+    assert movies.load_movies([550])[550]["updatedAt"] > old_timestamp
+
+    movies.save_movies([{**original, "title": "Updated by search"}])
+    assert movies.load_movies([550])[550]["movie"]["title"] == "Updated by search"
