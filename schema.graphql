@@ -4,6 +4,7 @@ schema {
 }
 
 type Query {
+  movie(movieId: Int!): MovieDetails
   movieComments(
     movieId: Int!
     before: MovieCommentCursorInput
@@ -218,4 +219,10 @@ type MovieCommentPage {
 type MovieCommentCursor {
   createdAt: String!
   id: Int!
+}
+
+type MovieDetails {
+  movie: MovieSearchResult!
+  isLiked: Boolean!
+  watchlistStatus: WatchlistStatus
 }

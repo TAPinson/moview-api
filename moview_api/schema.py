@@ -7,6 +7,7 @@ from graphql import GraphQLResolveInfo, build_schema
 
 from moview_api.comments import add_comment, delete_comment, list_comments
 from moview_api.db import (
+    get_movie_user_state,
     accept_friend_request,
     cancel_friend_request,
     decline_friend_request,
@@ -514,6 +515,34 @@ def resolve_delete_movie_comment(
     )
 
 
+def build_movie_response(
+    claims: dict[str, Any],
+    movie_id: int,
+) -> dict[str, Any] | None:
+    user_uuid, email = _required_identity(claims)
+    if type(movie_id) is not int or movie_id <= 0:
+        raise RuntimeError("A positive movie ID is required.")
+
+    movie = enrich_movies([{"movieId": movie_id}])[0]["movie"]
+    if movie is None:
+        return None
+
+    state = get_movie_user_state(
+        user_uuid=user_uuid, email=email, movie_id=movie_id,
+    )
+    return {"movie": movie, **state}
+
+
+def resolve_movie(
+    _source: Any,
+    info: GraphQLResolveInfo,
+    movieId: int,
+) -> dict[str, Any] | None:
+    return build_movie_response(
+        _identity_claims(info.context or {}), movieId,
+    )
+
+
 schema = build_schema(SCHEMA_PATH.read_text(encoding="utf-8"))
 query_type = schema.get_type("Query")
 users_type = schema.get_type("Users")
@@ -565,3 +594,5 @@ mutation_type.fields["removeFriend"].resolve = lambda _source, info, userId: bui
 query_type.fields["movieComments"].resolve = resolve_movie_comments
 mutation_type.fields["addMovieComment"].resolve = resolve_add_movie_comment
 mutation_type.fields["deleteMovieComment"].resolve = resolve_delete_movie_comment
+
+query_type.fields["movie"].resolve = resolve_movie

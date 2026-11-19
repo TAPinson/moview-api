@@ -12,6 +12,7 @@ from moview_api.auth import cognito
 from moview_api.movie_details import movie_details_budget
 from moview_api.tmdb import discover_movies_by_genre, search_movies, search_people
 from moview_api.schema import (
+    build_movie_response,
     build_movie_comments_response,
     build_add_movie_comment_response,
     build_delete_movie_comment_response,
@@ -215,6 +216,12 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
         return build_delete_movie_comment_response(
             _appsync_claims(event),
             arguments.get("commentId"),
+        )
+
+    if field_name == "movie":
+        return build_movie_response(
+            _appsync_claims(event),
+            arguments.get("movieId"),
         )
 
     raise ValueError(f"Unsupported AppSync field: {field_name}")

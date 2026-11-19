@@ -1063,3 +1063,33 @@ def _required_target_user_id(user_id: int) -> int:
 
 def _isoformat(value: Any) -> str:
     return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
+def get_movie_user_state(
+    *,
+    user_uuid: str,
+    email: str,
+    movie_id: int,
+) -> dict[str, Any]:
+    with _transaction() as cursor:
+        user_id = _lookup_user_id(
+            cursor, user_uuid=user_uuid, email=email,
+        )
+        cursor.execute(
+            """
+            select
+              exists (
+                select 1 from movie_likes
+                where user_id = %s and movie_id = %s
+              ),
+              (
+                select status from movie_watchlist
+                where user_id = %s and movie_id = %s
+              )
+            """,
+            (user_id, movie_id, user_id, movie_id),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            raise RuntimeError("Movie user state could not be loaded.")
+        return {"isLiked": row[0], "watchlistStatus": row[1]}

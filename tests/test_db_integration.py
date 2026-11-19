@@ -361,3 +361,25 @@ def test_movie_storage_and_refresh(accounts, monkeypatch):
 
     movies.save_movies([{**original, "title": "Updated by search"}])
     assert movies.load_movies([550])[550]["movie"]["title"] == "Updated by search"
+
+
+def test_movie_user_state_is_scoped_to_user(accounts):
+    alice, bob, _ = accounts
+
+    db.add_movie_like(**alice, movie_id=550)
+    db.mark_movie_watched(**alice, movie_id=550)
+
+    assert db.get_movie_user_state(**alice, movie_id=550) == {
+        "isLiked": True,
+        "watchlistStatus": "watched",
+    }
+    assert db.get_movie_user_state(**bob, movie_id=550) == {
+        "isLiked": False,
+        "watchlistStatus": None,
+    }
+
+    db.add_to_watchlist(**bob, movie_id=550)
+    assert db.get_movie_user_state(**bob, movie_id=550) == {
+        "isLiked": False,
+        "watchlistStatus": "want_to_watch",
+    }
