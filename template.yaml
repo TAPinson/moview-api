@@ -334,6 +334,38 @@ Resources:
         }
       ResponseMappingTemplate: $util.toJson($context.result)
 
+  MovieNightInvitationsResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: [MoviewGraphQLSchema]
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Query
+      FieldName: movieNightInvitations
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
+  RespondToMovieNightResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: [MoviewGraphQLSchema]
+    Properties:
+      ApiId: !GetAtt MoviewGraphQLApi.ApiId
+      TypeName: Mutation
+      FieldName: respondToMovieNight
+      DataSourceName: !GetAtt MoviewLambdaDataSource.Name
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "operation": "Invoke",
+          "payload": $util.toJson($context)
+        }
+      ResponseMappingTemplate: $util.toJson($context.result)
+
   AddLikeResolver:
     Type: AWS::AppSync::Resolver
     DependsOn:

@@ -8,6 +8,7 @@ from typing import Any
 
 from graphql import graphql_sync
 
+from moview_api.movie_night import list_movie_nights, respond_to_movie_night
 from moview_api.auth import cognito
 from moview_api.movie_details import movie_details_budget
 from moview_api.tmdb import discover_movies_by_genre, search_movies, search_people
@@ -34,6 +35,7 @@ from moview_api.schema import (
     build_remove_like_response,
     build_remove_from_watchlist_response,
     build_send_movie_invitation_response,
+    movie_night_user_id,
     build_update_user_response,
     build_user_profile_response,
     build_watchlist_entries_response,
@@ -171,6 +173,16 @@ def _handle_appsync_resolver(event: JsonObject, context: Any) -> JsonObject:
     if field_name == "createProfilePhotoUpload":
         return build_create_profile_photo_upload_response(
             _appsync_claims(event), arguments.get("contentType")
+        )
+
+    if field_name == "movieNightInvitations":
+        return list_movie_nights(movie_night_user_id(_appsync_claims(event)))
+
+    if field_name == "respondToMovieNight":
+        return respond_to_movie_night(
+            movie_night_user_id(_appsync_claims(event)),
+            arguments.get("id"),
+            arguments.get("decision"),
         )
 
     if field_name == "sendMovieInvitation":

@@ -5,6 +5,7 @@ from typing import Any
 
 from graphql import GraphQLResolveInfo, build_schema
 
+from moview_api.movie_night import list_movie_nights, respond_to_movie_night
 from moview_api.comments import add_comment, delete_comment, list_comments
 from moview_api.db import (
     get_movie_user_state,
@@ -145,6 +146,26 @@ def resolve_create_profile_photo_upload(
 ) -> dict[str, Any]:
     return build_create_profile_photo_upload_response(
         _identity_claims(info.context or {}), contentType
+    )
+
+
+from .movie_night import list_movie_nights, respond_to_movie_night
+
+
+def movie_night_user_id(claims: dict[str, Any]) -> int:
+    user_uuid, email = _required_identity(claims)
+    return get_or_create_user_profile(user_uuid=user_uuid, email=email)["id"]
+
+
+def resolve_movie_night_invitations(_source: Any, info: GraphQLResolveInfo):
+    return list_movie_nights(movie_night_user_id(_identity_claims(info.context or {})))
+
+
+def resolve_respond_to_movie_night(
+    _source: Any, info: GraphQLResolveInfo, id: int, decision: str
+):
+    return respond_to_movie_night(
+        movie_night_user_id(_identity_claims(info.context or {})), id, decision
     )
 
 
@@ -577,6 +598,8 @@ mutation_type.fields["updateUser"].resolve = resolve_update_user
 mutation_type.fields["createProfilePhotoUpload"].resolve = (
     resolve_create_profile_photo_upload
 )
+query_type.fields["movieNightInvitations"].resolve = resolve_movie_night_invitations
+mutation_type.fields["respondToMovieNight"].resolve = resolve_respond_to_movie_night
 mutation_type.fields["sendMovieInvitation"].resolve = (
     resolve_send_movie_invitation
 )

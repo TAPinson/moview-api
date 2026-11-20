@@ -3,7 +3,32 @@ schema {
   mutation: Mutation
 }
 
+enum MovieNightResponse {
+  awaiting
+  accepted
+  declined
+}
+
+enum MovieNightDecision {
+  accepted
+  declined
+}
+
+type MovieNightInvitation {
+  id: Int!
+  movieId: Int!
+  eventSummary: String!
+  startsAt: String!
+  location: String
+  message: String
+  friendName: String!
+  friendProfilePhotoUrl: String
+  incoming: Boolean!
+  response: MovieNightResponse!
+}
+
 type Query {
+  movieNightInvitations: [MovieNightInvitation!]!
   movie(movieId: Int!): MovieDetails
   movieComments(
     movieId: Int!
@@ -15,6 +40,7 @@ type Query {
 }
 
 type Mutation {
+  respondToMovieNight(id: Int!, decision: MovieNightDecision!): Boolean!
   addMovieComment(movieId: Int!, body: String!): MovieComment!
   deleteMovieComment(commentId: Int!): Boolean!
   updateUser(input: UpdateUserProfileInput!): UserProfile!

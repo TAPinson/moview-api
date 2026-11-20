@@ -73,4 +73,8 @@ create index movie_invitations_pending_idx
   on movie_invitations (created_at)
   where status in ('pending', 'failed');
 
+ALTER TABLE movie_invitations
+  ADD COLUMN response text NOT NULL DEFAULT 'awaiting'
+  CHECK (response IN ('awaiting', 'accepted', 'declined'));
+
 commit;
